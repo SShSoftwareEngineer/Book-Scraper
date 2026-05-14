@@ -1,32 +1,37 @@
+"""
+The module contains HTML parsing functions
+
+book_urls_parser() -> list[str]: function for extracting all book URLs using Playwright.
+book_parser(page, url: str, worker_id: int) -> dict | None: function for parsing single book details using Playwright,
+   given a page object, book URL, and worker ID for logging purposes.
+"""
+
 import http
-
 from playwright.sync_api import sync_playwright
-
-from config import const
+from config import const, selectors
 
 
 def book_urls_parser() -> list[str]:
     """
     Extract all book URLs using Playwright
+    Returns:
+        list[str]: list of book URLs
     """
 
     book_urls = []
-
     with sync_playwright() as pw:
         browser = pw.chromium.launch(headless=True)
         page = browser.new_page()
-
-        page.goto('https://books.toscrape.com/')
+        page.goto(const.base_url)
 
         current_page = 1
         while True:
             print(f'Extracting book URLs from page {current_page}')
-
             # Get all book links on current page
-            page_urls = page.locator('.image_container a').evaluate_all('elements => elements.map(el => el.href)')
+            page_urls = page.locator(selectors.url_containers).evaluate_all('elements => elements.map(el => el.href)')
             book_urls.extend(page_urls)
             # Check for next page
-            next_button = page.locator('.next a')
+            next_button = page.locator(selectors.next_page)
             if current_page == const.max_page_per_category or next_button.count() == 0:
                 break
             # Goto next page
@@ -37,9 +42,16 @@ def book_urls_parser() -> list[str]:
     return book_urls
 
 
+# pylint: disable=too-many-locals
 def book_parser(page, url: str, worker_id: int) -> dict | None:
     """
     Parsing single book details using Playwright
+    Attributes:
+        page (str): HTML string
+        url (str): Book URL to parse
+        worker_id (int): ID of the worker parsing the book
+    Returns:
+        dict | None: Parsed book details or None if parsing fails
     """
 
     result = {}
@@ -56,30 +68,30 @@ def book_parser(page, url: str, worker_id: int) -> dict | None:
         case response if response.status == http.HTTPStatus.OK:
             # Extract book data using Playwright selectors.
             # Title
-            title = page.locator('h1').inner_text()
+            title = page.locator(selectors.title).inner_text()
             # Price
-            price = page.locator('.product_main .price_color').inner_text()
+            price = page.locator(selectors.price).inner_text()
             # Rating
-            rating_elem = page.locator('.product_main .star-rating')
+            rating_elem = page.locator(selectors.rating)
             rating = rating_elem.get_attribute('class').split()[-1]
             # Availability
-            available = page.locator('.product_main .availability').inner_text().strip()
+            available = page.locator(selectors.available).inner_text().strip()
             # Image URL
-            image_url = page.locator('.item.active img').get_attribute('src')
+            image_url = page.locator(selectors.image_url).get_attribute('src')
             if image_url:
-                image_url = f'https://books.toscrape.com/{image_url.lstrip('../')}'
+                image_url = f'{const.base_url}{image_url.lstrip('../')}'
             # Description
-            description_elem = page.locator('#product_description ~ p')
+            description_elem = page.locator(selectors.description)
             description = description_elem.inner_text() if description_elem.count() > 0 else ""
             # Product information card
             product_info = {}
-            rows = page.locator('table.table-striped tr').all()
+            rows = page.locator(selectors.info_rows).all()
             for row in rows:
                 th = row.locator('th').inner_text()
                 td = row.locator('td').inner_text()
                 product_info[th] = td
             # Category
-            breadcrumbs = page.locator('.breadcrumb li').all()
+            breadcrumbs = page.locator(selectors.category).all()
             category = breadcrumbs[-2].inner_text() if len(breadcrumbs) > 2 else ''
             report = f'Worker {worker_id} parsed: {title}'
             result = {

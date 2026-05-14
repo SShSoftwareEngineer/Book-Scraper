@@ -3,24 +3,43 @@ name = "book-scraper"
 version = "0.1.0"
 description = ""
 authors = [
-    {name = "Common",email = "shypulin@ukr.net"}
+    { name = "Common", email = "shypulin@ukr.net" }
 ]
 requires-python = ">=3.14"
 dependencies = [
     "fake-useragent (>=2.2.0,<3.0.0)",
-    "psycopg2 (>=2.9.11,<3.0.0)",
-    "playwright (>=1.58.0,<2.0.0)",
-    "dotenv (>=0.9.9,<0.10.0)"
+    "psycopg2 (==2.9.12)",
+    "playwright (==1.59.0)",
+    "dotenv (>=0.9.9,<0.10.0)",
+    "packaging (==26.2)",
+    "pathspec (==1.1.1)",
+    "mypy (>=2.0.0,<3.0.0)",
+    "types-psycopg2 (>=2.9.21.20260508,<3.0.0.0)",
 ]
 
 [dependency-groups]
 dev = [
     "pylint (>=4.0.5,<5.0.0)",
-    "mypy (>=1.20.0,<2.0.0)",
-    "pytest (>=9.0.3,<10.0.0)"
+    "pytest (>=9.0.3,<10.0.0)",
 ]
-
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
+
+#----- PyLint config -----
+
+[tool.pylint.format]
+max-line-length = 120
+
+#----- MyPy config -----
+
+[tool.mypy]
+python_version = "3.14"
+
+[[tool.mypy.overrides]]
+module = [
+    "playwright.*",
+    "psycopg2.*"
+]
+ignore_missing_imports = true

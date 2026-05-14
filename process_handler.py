@@ -1,8 +1,24 @@
+"""
+The module contains the implementation of a multiprocessing system for web scraping and data parsing.
+
+- worker_process: a function that launches a browser, scrapes book details, and puts results into a result queue.
+- db_writer_process: a function that connects to a PostgreSQL database and writes parsed book data from
+   the result queue into the database.
+- ProcessManager: a class that manages multiple worker processes, monitors their health, and restarts them
+   if they crash. It also handles graceful shutdown by sending stop signals to the worker processes and waiting
+   for them to finish. The module uses Playwright for web scraping and psycopg2 for database interactions. The
+   worker processes scrape book details from given URLs and the database writer process ensures that the scraped
+   data is stored in a PostgreSQL database.
+"""
+
 import time
 from multiprocessing import JoinableQueue, Process
-import psycopg2
-from psycopg2.extras import Json
+from queue import Empty
+from playwright.sync_api import Error as PlaywrightError, TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import sync_playwright
+import psycopg2
+from psycopg2 import Error
+from psycopg2.extras import Json
 from parsers import book_parser
 
 
@@ -10,24 +26,37 @@ def worker_process(task_queue: JoinableQueue, result_queue: JoinableQueue, worke
     """
     Worker process: launches browser, scrapes book details
     """
+
     with sync_playwright() as pw:
         browser = pw.chromium.launch(headless=True)
         page = browser.new_page()
         while True:
             try:
-                url = task_queue.get(timeout=5)
-                if url is None:  # Poison pill
+                # Get parsing task
+                try:
+                    url = task_queue.get(timeout=5)
+                except Empty:
+                    continue  # Move on to the next iteration if the queue is empty
+
+                if url is None:  # Stop signal
                     task_queue.task_done()
                     break
+
                 # Scrape book details
                 book = book_parser(page, url, worker_id)
                 if book:
                     result_queue.put(book)
                 task_queue.task_done()
-            except Exception as e:
-                print(f'Worker {worker_id} error: {e}')
+
+            except (PlaywrightError, PlaywrightTimeoutError) as err:
+                # Playwright-specific errors (e.g., navigation, selector issues)
+                print(f'Worker {worker_id} browser error: {err}')
+
+            except ValueError as err:
+                # Data errors
+                print(f'Worker {worker_id} data error: {err}')
                 # Simulate crash for testing process manager
-                if 'CRASH' in str(e):
+                if 'CRASH' in str(locals().get('err', '')):
                     raise
         browser.close()
     print(f'Worker {worker_id} finished')
@@ -36,7 +65,11 @@ def worker_process(task_queue: JoinableQueue, result_queue: JoinableQueue, worke
 def db_writer_process(result_queue: JoinableQueue, db_settings):
     """
     Dedicated process for writing to PostgreSQL
+    Attributes:
+        result_queue (JoinableQueue): Queue from which to read parsed book data
+        db_settings: Database settings for connection
     """
+
     # Database initialization
     connection_string = (f'dbname={db_settings.name} host={db_settings.host} port={db_settings.port}'
                          f' user={db_settings.user} password={db_settings.password}')
@@ -65,7 +98,7 @@ def db_writer_process(result_queue: JoinableQueue, db_settings):
 
     while True:
         book = result_queue.get()
-        if book is None:  # Poison pill
+        if book is None:  # Stop signal
             break
 
         try:
@@ -86,8 +119,8 @@ def db_writer_process(result_queue: JoinableQueue, db_settings):
                            ))
             connect.commit()
 
-        except Exception as e:
-            print(f'Database write Error: {e}')
+        except Error as err:
+            print(f'Database write Error: {err}')
             connect.rollback()
 
     cursor.close()
@@ -96,19 +129,32 @@ def db_writer_process(result_queue: JoinableQueue, db_settings):
 
 
 class ProcessManager:
+    """
+    Class to manage worker processes, monitor their health, and restart if they crash.
+
+
+    """
+
     def __init__(self, num_processes: int, task_queue: JoinableQueue, result_queue: JoinableQueue):
+        """
+        Initialization function
+        """
         self.num_processes = num_processes
         self.task_queue = task_queue
         self.result_queue = result_queue
-        self.processes = []
+        self.processes: list[dict] = []
 
     def start(self):
-        """Start all worker processes"""
+        """
+        Start all worker processes
+        """
         for i in range(self.num_processes):
             self._start_worker(i)
 
     def _start_worker(self, worker_id: int):
-        """Start single worker process"""
+        """
+        Start single worker process
+        """
         p = Process(
             target=worker_process,
             args=(self.task_queue, self.result_queue, worker_id),
