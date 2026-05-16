@@ -23,9 +23,7 @@ from parsers import book_parser
 
 
 def worker_process(task_queue: JoinableQueue, result_queue: JoinableQueue, worker_id: int):
-    """
-    Worker process: launches browser, scrapes book details
-    """
+    """ Worker process: launches browser, scrapes book details, and puts results into a result queue """
 
     with sync_playwright() as pw:
         browser = pw.chromium.launch(headless=True)
@@ -129,46 +127,36 @@ def db_writer_process(result_queue: JoinableQueue, db_settings):
 
 
 class ProcessManager:
-    """
-    Class to manage worker processes, monitor their health, and restart if they crash.
-
-
-    """
+    """ Class to manage worker processes, monitor their health, and restart if they crash """
 
     def __init__(self, num_processes: int, task_queue: JoinableQueue, result_queue: JoinableQueue):
-        """
-        Initialization function
-        """
+        """ Initialization function """
         self.num_processes = num_processes
         self.task_queue = task_queue
         self.result_queue = result_queue
         self.processes: list[dict] = []
 
     def start(self):
-        """
-        Start all worker processes
-        """
+        """ Start all worker processes """
         for i in range(self.num_processes):
             self._start_worker(i)
 
     def _start_worker(self, worker_id: int):
-        """
-        Start single worker process
-        """
-        p = Process(
+        """ Start single worker process with given ID """
+        process = Process(
             target=worker_process,
             args=(self.task_queue, self.result_queue, worker_id),
             name=f'Worker-{worker_id}'
         )
-        p.start()
-        self.processes.append({'id': worker_id, 'process': p})
-        print(f"Started Worker {worker_id} (PID: {p.pid})")
+        process.start()
+        self.processes.append({'id': worker_id, 'process': process})
+        print(f"Started Worker {worker_id} (PID: {process.pid})")
 
     def monitor(self):
-        """Monitor workers and restart if crashed"""
+        """ Monitor workers and restart if crashed """
         print("Process Manager monitoring started")
 
-        while any(p['process'].is_alive() for p in self.processes):
+        while any(process['process'].is_alive() for process in self.processes):
             for worker in self.processes:
                 proc = worker['process']
                 worker_id = worker['id']

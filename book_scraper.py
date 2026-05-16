@@ -11,9 +11,7 @@ from process_handler import db_writer_process
 
 
 def main():
-    """
-    Main functional execution
-    """
+    """ Main functional execution """
 
     # Creating multiprocessing queues
     task_queue = JoinableQueue(maxsize=const.task_queue_maxsize)
