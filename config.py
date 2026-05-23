@@ -14,10 +14,12 @@ load_dotenv()
 class ProjConst:
     """ Class for storing project system settings from environment variables """
     base_url: str = os.getenv('BASE_URL', '')
-    process_count: int = int(os.getenv('PROCESS_COUNT', '3'))
-    task_queue_maxsize: int = int(os.getenv('TASK_QUEUE_MAXSIZE', '300'))
-    result_queue_maxsize: int = int(os.getenv('RESULT_QUEUE_MAXSIZE', '300'))
     max_page_per_category: int = int(os.getenv('MAX_PAGE_PER_CATEGORY', '1'))
+    # Celery settings
+    worker_count: int = int(os.getenv('WORKER_COUNT', '3'))
+    max_retries: int = int(os.getenv('MAX_RETRIES', '3'))
+    batch_size: int = int(os.getenv('BATCH_SIZE', '50'))
+    collect_interval: int = int(os.getenv('COLLECT_INTERVAL', '10'))  # seconds
 
 
 @dataclass(frozen=True)
@@ -28,7 +30,16 @@ class DBSettings:
     port: int = int(os.getenv('PORT', '5432'))
     user: str = os.getenv('USER', '')
     password: str = os.getenv('PASSWORD', '')
-    # batch_size: int = int(os.getenv('BATCH_SIZE', '100'))
+
+
+@dataclass(frozen=True)
+class RedisSettings:
+    """ Class for storing Redis settings """
+    host: str = os.getenv('REDIS_HOST', 'localhost')
+    port: int = int(os.getenv('REDIS_PORT', '6379'))
+    broker_db: int = int(os.getenv('REDIS_BROKER_DB', '0'))
+    backend_db: int = int(os.getenv('REDIS_BACKEND_DB', '1'))
+    cache_db: int = int(os.getenv('REDIS_CACHE_DB', '2'))
 
 
 @dataclass(frozen=True)
@@ -45,12 +56,11 @@ class Selectors:
     info_rows: str = 'table.table-striped tr'
     category: str = '.breadcrumb li'
 
-    category_title: str = 'strong'
-
 
 # Create instances of settings for use in the project
 const = ProjConst()
 db_settings = DBSettings()
+redis_settings = RedisSettings()
 selectors = Selectors()
 
 if __name__ == '__main__':

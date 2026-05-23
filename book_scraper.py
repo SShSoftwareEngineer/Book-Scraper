@@ -1,56 +1,48 @@
 """
 The main module contains a script for parsing book information from a website and writing it to a database using
-multiprocessing. It orchestrates the entire workflow, including URL extraction, task management, and database writing.
+Celery. It orchestrates the entire workflow, including URL extraction, task management, and database writing.
 """
 
-from multiprocessing import Process, JoinableQueue
-from config import db_settings, const
 from parsers import book_urls_parser
-from process_handler import ProcessManager
-from process_handler import db_writer_process
+from tasks import parse_book, collect_and_save
 
 
 def main():
-    """ Main functional execution """
-
-    # Creating multiprocessing queues
-    task_queue = JoinableQueue(maxsize=const.task_queue_maxsize)
-    result_queue = JoinableQueue(maxsize=const.result_queue_maxsize)
+    """Main execution flow"""
 
     # Extract all book URLs
     print('Extracting book URLs...')
     book_urls = book_urls_parser()
     print(f'{len(book_urls)} book URLs extracted')
 
-    # Fill task queue
+    # Send parsing tasks to Celery parsing workers
+    print('Sending tasks to parsing workers...')
+    tasks = []
     for url in book_urls:
-        task_queue.put(url)
+        task = parse_book.delay(url)
+        tasks.append(task)
 
-    # Start DB writer
-    db_process = Process(
-        target=db_writer_process,
-        args=(result_queue, db_settings)
-    )
-    db_process.start()
+    print(f'{len(tasks)} parsing tasks sent to Celery')
 
-    # Start Process Manager with workers
-    manager = ProcessManager(const.process_count, task_queue, result_queue)
-    manager.start()
+    # Wait for all parsing tasks to complete
+    print('Waiting for all parsing tasks to complete...')
+    completed = 0
+    for task in tasks:
+        try:
+            task.get(timeout=300)  # Wait max 5 minutes per task
+            completed += 1
+            if completed % 10 == 0:
+                print(f'{completed}/{len(tasks)} tasks completed')
+        except Exception as exc:
+            print(f'Task failed: {exc}')
 
-    # Monitor workers
-    manager.monitor()
+    print(f'All parsing tasks completed: {completed}/{len(tasks)}')
 
-    # Wait for task queue to empty
-    task_queue.join()
-    print('All scraping tasks completed')
+    # Final flush - save any remaining books in cache
+    print('Flushing remaining books to database...')
+    collect_and_save.delay()
 
-    # Stop workers
-    manager.stop()
-
-    # Wait for results to be written
-    result_queue.put(None)  # Stop signal for DB writer
-    db_process.join()
-    print('All database wright tasks completed')
+    print('Done! Check Flower dashboard for details.')
 
 
 if __name__ == '__main__':
