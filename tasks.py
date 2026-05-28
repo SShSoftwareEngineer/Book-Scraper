@@ -26,15 +26,17 @@ browser: Browser | None = None
 page: Page | None = None
 
 
+def ensure_browser():
+    global playwright, browser, page
+    if browser is None:
+        playwright = sync_playwright().start()
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page()
+
 @worker_process_init.connect
 def setup_browser(**_kwargs):
     """Initialize Playwright browser when worker process starts"""
-    global playwright, browser, page
-
-    playwright = sync_playwright().start()
-    browser = playwright.chromium.launch(headless=True)
-    page = browser.new_page()
-
+    ensure_browser()
     print('Browser initialized')
 
 
@@ -102,9 +104,12 @@ def parse_book(self, url: str):
     Returns:
         str: Task ID (used as cache key)
     """
-    global page
+    global page, browser, playwright
 
     worker_id = 'unknown'
+
+    # Инициализируем браузер если его нет
+    ensure_browser()
 
     try:
         # Get worker index for logging
@@ -128,6 +133,12 @@ def parse_book(self, url: str):
     except Exception as exc:
         print(f'Worker {worker_id} error: {exc}')
         raise self.retry(exc=exc)
+
+    # finally:
+    #     # Очистка в конце
+    #     if browser is not None:
+    #         browser.close()
+    #         playwright.stop()
 
 
 @app.task(base=DatabaseTask, bind=True)

@@ -1,7 +1,17 @@
 """
 Celery application configuration and setup
 """
+import asyncio
+import platform
 
+if platform.system() == 'Windows':
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
+import os
 from celery import Celery
 import redis
 from config import redis_settings, const
@@ -9,11 +19,19 @@ from config import redis_settings, const
 # Celery app
 app = Celery('book_scraper')
 
+if platform.system() == 'Windows':
+    os.environ['FORKED_BY_MULTIPROCESSING'] = '1'
+
 # Celery configuration
+if platform.system() == 'Windows':
+    app.conf.update(
+        worker_pool='solo',
+        # asyncio_mode='strict',
+    )
 app.conf.update(
     broker_url=f'redis://{redis_settings.host}:{redis_settings.port}/{redis_settings.broker_db}',
     result_backend=f'redis://{redis_settings.host}:{redis_settings.port}/{redis_settings.backend_db}',
-
+    include=['tasks'],
     task_serializer='json',
     result_serializer='json',
     accept_content=['json'],

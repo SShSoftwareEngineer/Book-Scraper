@@ -1,0 +1,95 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:8-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  celery_worker:
+    build: .
+    command: celery -A celery_app worker --loglevel=info --concurrency=3
+    depends_on:
+      redis:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - DB_HOST=db
+      - DB_PORT=5432
+      - ${DB_NAME}
+      - ${DB_USER}
+      - ${DB_PASSWORD}
+    volumes:
+      - ./logs:/app/logs
+
+  celery_beat:
+    build: .
+    command: celery -A celery_app beat --loglevel=info
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    volumes:
+      - ./logs:/app/logs
+
+  flower:
+    build: .
+    command: celery -A celery_app flower --port=5555
+    ports:
+      - "5555:5555"
+    depends_on:
+      - redis
+    environment:
+      - REDIS_HOST=redis
+
+  scraper:
+    build: .
+    command: python book_scraper.py
+    depends_on:
+      redis:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+      celery_worker:
+        condition: service_started
+      celery_beat:
+        condition: service_started
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - DB_HOST=db
+      - DB_PORT=5432
+    volumes:
+      - ./logs:/app/logs
+
+volumes:
+  redis_data:
+  postgres_data:

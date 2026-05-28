@@ -2,6 +2,16 @@
 The main module contains a script for parsing book information from a website and writing it to a database using
 Celery. It orchestrates the entire workflow, including URL extraction, task management, and database writing.
 """
+import asyncio
+import platform
+
+if platform.system() == 'Windows':
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
 
 from parsers import book_urls_parser
 from tasks import parse_book, collect_and_save
@@ -29,11 +39,13 @@ def main():
     completed = 0
     for task in tasks:
         try:
-            task.get(timeout=300)  # Wait max 5 minutes per task
+            task.get(timeout=30)  # Wait max 5 minutes per task
             completed += 1
             if completed % 10 == 0:
                 print(f'{completed}/{len(tasks)} tasks completed')
         except Exception as exc:
+            import traceback
+            traceback.print_exc()  # ← полный стек
             print(f'Task failed: {exc}')
 
     print(f'All parsing tasks completed: {completed}/{len(tasks)}')

@@ -37,10 +37,6 @@ build-backend = "poetry.core.masonry.api"
 [tool.pylint.format]
 max-line-length = 120
 
-[tool.pylint.master]
-# Помогает Pylint видеть структуру проекта в monorepo
-init-hook = "import sys; sys.path.append('./backend')"
-
 #----- MyPy config -----
 
 [tool.mypy]

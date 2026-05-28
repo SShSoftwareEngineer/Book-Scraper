@@ -42,6 +42,7 @@ class RedisSettings:
     cache_db: int = int(os.getenv('REDIS_CACHE_DB', '2'))
 
 
+# pylint: disable=too-many-instance-attributes
 @dataclass(frozen=True)
 class Selectors:
     """ Class for storing selectors used in the data parsing from environment variables """
