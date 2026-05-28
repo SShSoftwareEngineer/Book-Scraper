@@ -1,8 +1,10 @@
 version: '3.8'
 
 services:
+  # Redis - message broker and cache
   redis:
     image: redis:8-alpine
+    container_name: redis-book-scraper
     ports:
       - "6379:6379"
     volumes:
@@ -12,9 +14,13 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+    networks:
+      - book-scraper-network
 
-  db:
-    image: postgres:15-alpine
+  # PostgreSQL - main database
+  postgres:
+    image: postgres:17-alpine
+    container_name: postgres-book-scraper
     environment:
       POSTGRES_DB: ${DB_NAME}
       POSTGRES_USER: ${DB_USER}
@@ -28,68 +34,105 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+    networks:
+      - book-scraper-network
 
+  # Celery Worker
   celery_worker:
     build: .
-    command: celery -A celery_app worker --loglevel=info --concurrency=3
-    depends_on:
-      redis:
-        condition: service_healthy
-      db:
-        condition: service_healthy
+    container_name: celery-worker-book-scraper
+    command: celery -A celery_app worker --loglevel=INFO --concurrency=3 --pool=threads
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - DB_HOST=db
+      - DB_HOST=postgres
       - DB_PORT=5432
-      - ${DB_NAME}
-      - ${DB_USER}
-      - ${DB_PASSWORD}
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
     volumes:
       - ./logs:/app/logs
 
+  # Celery Beat - periodic tasks
   celery_beat:
     build: .
-    command: celery -A celery_app beat --loglevel=info
-    depends_on:
-      redis:
-        condition: service_healthy
+    container_name: celery-beat-book-scraper
+    command: celery -A celery_app beat --loglevel=INFO
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
     volumes:
       - ./logs:/app/logs
+    networks:
+      - book-scraper-network
+    restart: unless-stopped
 
+  # Flower - monitoring UI
   flower:
     build: .
-    command: celery -A celery_app flower --port=5555
-    ports:
-      - "5555:5555"
-    depends_on:
-      - redis
-    environment:
-      - REDIS_HOST=redis
-
-  scraper:
-    build: .
-    command: python book_scraper.py
-    depends_on:
-      redis:
-        condition: service_healthy
-      db:
-        condition: service_healthy
-      celery_worker:
-        condition: service_started
-      celery_beat:
-        condition: service_started
+    container_name: flower-book-scraper
+    command: celery -A celery_app flower --port=5555 --loglevel=INFO
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - DB_HOST=db
-      - DB_PORT=5432
+    depends_on:
+      - redis
+      - celery-worker
+    ports:
+      - "5555:5555"
     volumes:
       - ./logs:/app/logs
+    networks:
+      - book-scraper-network
+    restart: unless-stopped
+
+  # Main Scraper (runs once on demand)
+  # Uncomment to run automatically on startup
+#  scraper:
+#    build: .
+#    container_name: book-scraper-main
+#    command: python book_scraper.py
+#    environment:
+#      - REDIS_HOST=redis
+#      - REDIS_PORT=6379
+#      - DB_HOST=postgres
+#      - DB_PORT=5432
+#      - DB_NAME=${DB_NAME}
+#      - DB_USER=${DB_USER}
+#      - DB_PASSWORD=${DB_PASSWORD}
+#    depends_on:
+#      redis:
+#        condition: service_healthy
+#      postgres:
+#        condition: service_healthy
+#      celery_worker:
+#        condition: service_started
+#      celery_beat:
+#        condition: service_started
+#    volumes:
+#      - ./logs:/app/logs
+#    networks:
+#      - book-scraper-network
 
 volumes:
   redis_data:
   postgres_data:
+
+networks:
+  book-scraper-network:
+    driver: bridge

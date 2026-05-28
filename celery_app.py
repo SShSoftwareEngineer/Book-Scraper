@@ -1,53 +1,67 @@
 """
-Celery application configuration and setup
+Celery application configuration optimized for Windows + async Playwright
+Uses Pydantic BaseSettings for environment variables
 """
+
+import os
 import asyncio
 import platform
 
+# CRITICAL: Set event loop policy BEFORE any Playwright imports
 if platform.system() == 'Windows':
     import warnings
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", DeprecationWarning)
+        # asyncio.set_event_loop_policy() Deprecated since Python 3.14; will be removed in Python 3.16.
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
-import os
 from celery import Celery
 import redis
-from config import redis_settings, const
+from config import redis_settings, celery_settings, logging_settings, scraper_settings, const
 
-# Celery app
+# Initialize Celery app
 app = Celery('book_scraper')
 
+# Windows-specific configuration
 if platform.system() == 'Windows':
     os.environ['FORKED_BY_MULTIPROCESSING'] = '1'
 
-# Celery configuration
-if platform.system() == 'Windows':
-    app.conf.update(
-        worker_pool='solo',
-        # asyncio_mode='strict',
-    )
+# Main Celery configuration
 app.conf.update(
+    # Broker and backend from environment
     broker_url=f'redis://{redis_settings.host}:{redis_settings.port}/{redis_settings.broker_db}',
     result_backend=f'redis://{redis_settings.host}:{redis_settings.port}/{redis_settings.backend_db}',
     include=['tasks'],
+
+    # Serialization
     task_serializer='json',
     result_serializer='json',
     accept_content=['json'],
+
+    # Timezone
     timezone='UTC',
     enable_utc=True,
 
+    # Task configuration
     result_expires=3600,  # Results expire after 1 hour
     worker_prefetch_multiplier=1,  # Take one task at a time
     task_acks_late=True,  # Acknowledge task after completion
     task_reject_on_worker_lost=True,  # Requeue if worker dies
 
+    # Task timeout settings
+    task_time_limit=600,  # Kill task if it takes >10 minutes
+    task_soft_time_limit=550,  # Warn task at 9:10 minutes
+
+    # Worker pool - use 'threads' for Windows + async compatibility
+    worker_pool='threads' if platform.system() == 'Windows' else 'prefork',
+    worker_max_tasks_per_child=100,
+
     # Periodic tasks schedule
     beat_schedule={
         'collect-and-save-books': {
             'task': 'tasks.collect_and_save',
-            'schedule': float(const.collect_interval),
+            'schedule': scraper_settings.collect_interval,
         },
     },
 )

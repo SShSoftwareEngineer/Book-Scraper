@@ -15,15 +15,13 @@ class ProjConst:
     """ Class for storing project system settings from environment variables """
     base_url: str = os.getenv('BASE_URL', '')
     max_page_per_category: int = int(os.getenv('MAX_PAGE_PER_CATEGORY', '1'))
-    # Celery settings
-    worker_count: int = int(os.getenv('WORKER_COUNT', '3'))
-    max_retries: int = int(os.getenv('MAX_RETRIES', '3'))
     batch_size: int = int(os.getenv('BATCH_SIZE', '50'))
-    collect_interval: int = int(os.getenv('COLLECT_INTERVAL', '10'))  # seconds
+    collect_interval: int = int(os.getenv('COLLECT_INTERVAL', '10'))  # in seconds
+    worker_count: int = int(os.getenv('WORKER_COUNT', '3'))
 
 
 @dataclass(frozen=True)
-class DBSettings:
+class DatabaseSettings:
     """ Class for storing database settings from environment variables """
     name: str = os.getenv('DB_NAME', '')
     host: str = os.getenv('HOST', '')
@@ -40,6 +38,25 @@ class RedisSettings:
     broker_db: int = int(os.getenv('REDIS_BROKER_DB', '0'))
     backend_db: int = int(os.getenv('REDIS_BACKEND_DB', '1'))
     cache_db: int = int(os.getenv('REDIS_CACHE_DB', '2'))
+
+
+@dataclass(frozen=True)
+class CelerySettings:
+    """ Class for storing celery settings """
+    broker_url: str = os.getenv('CELERY_BROKER_URL', 'redis://localhost:6379/0')
+    result_backend: str = os.getenv('CELERY_RESULT_BACKEND', 'redis://localhost:6379/1')
+
+
+@dataclass(frozen=True)
+class LoggingSettings:
+    """ Class for storing logging settings """
+    level: str = os.getenv('LOG_LEVEL', 'INFO')
+
+
+@dataclass(frozen=True)
+class FlowerSettings:
+    """ Class for storing flower settings """
+    port: int = int(os.getenv('FLOWER_PORT', '5555'))
 
 
 # pylint: disable=too-many-instance-attributes
@@ -60,8 +77,11 @@ class Selectors:
 
 # Create instances of settings for use in the project
 const = ProjConst()
-db_settings = DBSettings()
+db_settings = DatabaseSettings()
 redis_settings = RedisSettings()
+celery_settings = CelerySettings()
+logging_settings = LoggingSettings()
+flower_settings = FlowerSettings()
 selectors = Selectors()
 
 if __name__ == '__main__':

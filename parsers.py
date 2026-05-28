@@ -7,38 +7,73 @@ book_parser(page, url: str, worker_id: int) -> dict | None: function for parsing
 """
 
 import http
-from playwright.sync_api import sync_playwright
+# from playwright.sync_api import sync_playwright
+import asyncio
+from playwright.async_api import async_playwright
 from config import const, selectors
 
 
-def book_urls_parser() -> list[str]:
+# def book_urls_parser() -> list[str]:
+#     """
+#     Extract all book URLs using Playwright
+#     Returns:
+#         list[str]: list of book URLs
+#     """
+#
+#     book_urls = []
+#     with sync_playwright() as pw:
+#         browser = pw.chromium.launch(headless=True)
+#         page = browser.new_page()
+#         page.goto(const.base_url)
+#
+#         current_page = 1
+#         while True:
+#             print(f'Extracting book URLs from page {current_page}')
+#             # Get all book links on current page
+#             page_urls = page.locator(selectors.url_containers).evaluate_all('elements => elements.map(el => el.href)')
+#             book_urls.extend(page_urls)
+#             # Check for next page
+#             next_button = page.locator(selectors.next_page)
+#             if current_page == const.max_page_per_category or next_button.count() == 0:
+#                 break
+#             # Goto next page
+#             next_button.click()
+#             page.wait_for_load_state(state='networkidle')
+#             current_page += 1
+#         browser.close()
+#     return book_urls
+
+
+async def book_urls_parser() -> list[str]:
     """
-    Extract all book URLs using Playwright
+    Extract all book URLs using Playwright (async)
     Returns:
         list[str]: list of book URLs
     """
 
     book_urls = []
-    with sync_playwright() as pw:
-        browser = pw.chromium.launch(headless=True)
-        page = browser.new_page()
-        page.goto(const.base_url)
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        page = await browser.new_page()
+        await page.goto(const.base_url)
 
         current_page = 1
         while True:
             print(f'Extracting book URLs from page {current_page}')
-            # Get all book links on current page
-            page_urls = page.locator(selectors.url_containers).evaluate_all('elements => elements.map(el => el.href)')
+            page_urls = await page.locator(selectors.url_containers).evaluate_all(
+                'elements => elements.map(el => el.href)'
+            )
             book_urls.extend(page_urls)
-            # Check for next page
+
             next_button = page.locator(selectors.next_page)
             if current_page == const.max_page_per_category or next_button.count() == 0:
                 break
-            # Goto next page
-            next_button.click()
-            page.wait_for_load_state(state='networkidle')
+
+            await next_button.click()
+            await page.wait_for_load_state(state='networkidle')
             current_page += 1
-        browser.close()
+
+        await browser.close()
     return book_urls
 
 
