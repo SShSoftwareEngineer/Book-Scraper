@@ -1,56 +1,35 @@
 """
-Celery tasks for book scraping and database writing
+Celery tasks for book scraping using async Playwright
+Optimized for Windows + Redis + Celery
 """
 
 import json
+import asyncio
+import threading
 from celery import Task
-from celery.signals import worker_process_init, worker_process_shutdown
-from playwright.sync_api import (
-    sync_playwright,
-    Error as PlaywrightError,
-    TimeoutError as PlaywrightTimeoutError,
-    Playwright,
-    Browser,
-    Page
-)
+from playwright.async_api import async_playwright
 import psycopg2
 from psycopg2.extras import Json
 
 from celery_app import app, cache
 from config import const, db_settings
-from parsers import book_parser
+from parsers import book_parser_async
 
-# Global Playwright instances (per worker process)
-playwright: Playwright | None = None
-browser: Browser | None = None
-page: Page | None = None
+# Thread-local storage for Playwright instances (one per thread)
+_thread_local = threading.local()
 
 
-def ensure_browser():
-    global playwright, browser, page
-    if browser is None:
-        playwright = sync_playwright().start()
-        browser = playwright.chromium.launch(headless=True)
-        page = browser.new_page()
-
-@worker_process_init.connect
-def setup_browser(**_kwargs):
-    """Initialize Playwright browser when worker process starts"""
-    ensure_browser()
-    print('Browser initialized')
-
-
-@worker_process_shutdown.connect
-def teardown_browser(**_kwargs):
-    """Close Playwright browser when worker process shuts down"""
-    global browser, playwright
-
-    if browser is not None:
-        browser.close()
-    if playwright is not None:
-        playwright.stop()
-
-    print('Browser closed')
+def get_event_loop():
+    """Get or create event loop for current thread"""
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_closed():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    return loop
 
 
 class DatabaseTask(Task):
@@ -92,53 +71,70 @@ class DatabaseTask(Task):
         return self._db_cursor
 
 
+async def parse_book_async(url: str, worker_id: str) -> dict | None:
+    """
+    Parse single book using async Playwright
+
+    Args:
+        url: Book URL to parse
+        worker_id: Worker identifier for logging
+
+    Returns:
+        dict: Parsed book data or None if failed
+    """
+    try:
+        async with async_playwright() as pw:
+            browser = await pw.chromium.launch(headless=True)
+            page = await browser.new_page()
+            await page.goto(url, wait_until='networkidle', timeout=30000)
+
+            # Parse book using your async parser
+            book = await book_parser_async(page, url, worker_id)
+
+            await browser.close()
+            return book
+
+    except asyncio.TimeoutError:
+        print(f'Worker {worker_id} Timeout parsing: {url}')
+        return None
+    except Exception as exc:
+        print(f'Worker {worker_id} Error parsing {url}: {exc}')
+        return None
+
+
 @app.task(bind=True, max_retries=const.max_retries, default_retry_delay=5)
 def parse_book(self, url: str):
     """
     Parse single book and store result in Redis cache
 
     Args:
-        self: Celery task instance (auto-injected by bind=True)
+        self: Celery task instance
         url: Book URL to parse
 
     Returns:
         str: Task ID (used as cache key)
     """
-    global page, browser, playwright
-
-    worker_id = 'unknown'
-
-    # Инициализируем браузер если его нет
-    ensure_browser()
-
     try:
-        # Get worker index for logging
         worker_id = self.request.hostname.split('@')[0] if self.request.hostname else 'unknown'
 
-        # Parse book
-        book = book_parser(page, url, worker_id)
+        # Get or create event loop for this thread
+        loop = get_event_loop()
+
+        # Run async parser in thread's event loop
+        book = loop.run_until_complete(parse_book_async(url, worker_id))
 
         if book:
             # Store in Redis cache with task_id as key
             cache_key = f'book:{self.request.id}'
-            cache.set(cache_key, json.dumps(book), ex=3600)  # Expire after 1 hour
+            cache.set(cache_key, json.dumps(book), ex=3600)
+            print(f'Worker {worker_id} Parsed and cached: {url}')
             return self.request.id
 
         raise ValueError(f'Failed to parse book: {url}')
 
-    except (PlaywrightError, PlaywrightTimeoutError) as exc:
-        print(f'Worker {worker_id} Playwright error: {exc}')
-        raise self.retry(exc=exc)
-
     except Exception as exc:
-        print(f'Worker {worker_id} error: {exc}')
+        print(f'Task {self.request.id} error: {exc}')
         raise self.retry(exc=exc)
-
-    # finally:
-    #     # Очистка в конце
-    #     if browser is not None:
-    #         browser.close()
-    #         playwright.stop()
 
 
 @app.task(base=DatabaseTask, bind=True)
@@ -147,7 +143,7 @@ def bulk_save_to_db(self, task_ids: list):
     Save batch of books from Redis cache to PostgreSQL
 
     Args:
-        self: Celery task instance with database connection (auto-injected)
+        self: Celery task instance with database connection
         task_ids: List of task IDs (cache keys)
 
     Returns:
@@ -170,8 +166,8 @@ def bulk_save_to_db(self, task_ids: list):
             book = json.loads(book_json)
 
             self.db_cursor.execute("""
-                                   INSERT INTO books (title, category, price, rating, available, image_url,
-                                                      description, product_info, url)
+                                   INSERT INTO books (title, category, price, rating, available,
+                                                      image_url, description, product_info, url)
                                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                                    ON CONFLICT (url) DO NOTHING
                                    """, (
@@ -188,8 +184,6 @@ def bulk_save_to_db(self, task_ids: list):
 
             self.db_connection.commit()
             saved_count += 1
-
-            # Delete from cache after successful save
             cache.delete(cache_key)
 
         except Exception as err:

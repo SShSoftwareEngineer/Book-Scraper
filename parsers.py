@@ -1,5 +1,5 @@
 """
-The module contains HTML parsing functions
+The module contains HTML parsing functions - both sync and async versions
 
 book_urls_parser() -> list[str]: function for extracting all book URLs using Playwright.
 book_parser(page, url: str, worker_id: int) -> dict | None: function for parsing single book details using Playwright,
@@ -7,10 +7,99 @@ book_parser(page, url: str, worker_id: int) -> dict | None: function for parsing
 """
 
 import http
-# from playwright.sync_api import sync_playwright
 import asyncio
 from playwright.async_api import async_playwright
 from config import const, selectors
+
+
+async def book_parser_async(page, url: str, worker_id: str) -> dict | None:
+    """
+    Parse book data from already loaded page (async version for Celery)
+
+    Args:
+        page: Playwright page object (already loaded)
+        url: Book URL
+        worker_id: Worker identifier for logging
+
+    Returns:
+        dict: Book data or None if parsing failed
+    """
+    try:
+        # Extract book data from page
+        # Adapt these selectors to your actual website structure
+
+        title = await page.locator(selectors.get('title', 'h1')).first.text_content()
+        price = await page.locator(selectors.get('price', '.price')).first.text_content()
+        rating = await page.locator(selectors.get('rating', '.rating')).first.text_content()
+
+        book = {
+            'title': title.strip() if title else None,
+            'category': selectors.get('category', 'unknown'),
+            'price': price.strip() if price else None,
+            'rating': rating.strip() if rating else None,
+            'available': 'In stock',  # Adjust as needed
+            'image_url': await page.locator(selectors.get('image', 'img')).first.get_attribute('src'),
+            'description': await page.locator(selectors.get('description', '.description')).first.text_content(),
+            'product_info': {},
+            'url': url
+        }
+
+        return book if book.get('title') else None
+
+    except Exception as exc:
+        print(f'Worker {worker_id} Parser error: {exc}')
+        return None
+
+
+async def book_urls_parser_async() -> list[str]:
+    """
+    Extract all book URLs using async Playwright
+
+    Returns:
+        list[str]: List of book URLs
+    """
+    book_urls = []
+
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        page = await browser.new_page()
+
+        await page.goto(const.base_url)
+
+        current_page = 1
+        while True:
+            print(f'Extracting book URLs from page {current_page}')
+
+            # Get all book links on current page
+            page_urls = await page.locator(selectors.get('url_containers', 'a.book-link')).evaluate_all(
+                'elements => elements.map(el => el.href)'
+            )
+            book_urls.extend(page_urls)
+
+            # Check for next page
+            next_button = page.locator(selectors.get('next_page', '.next'))
+            if current_page == const.max_page_per_category or await next_button.count() == 0:
+                break
+
+            # Go to next page
+            await next_button.click()
+            await page.wait_for_load_state(state='networkidle')
+            current_page += 1
+
+        await browser.close()
+
+    return book_urls
+
+
+# Sync wrapper for main script (non-Celery usage)
+def book_urls_parser() -> list[str]:
+    """Sync wrapper for book_urls_parser_async"""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        return loop.run_until_complete(book_urls_parser_async())
+    finally:
+        loop.close()
 
 
 # def book_urls_parser() -> list[str]:
@@ -34,7 +123,7 @@ from config import const, selectors
 #             book_urls.extend(page_urls)
 #             # Check for next page
 #             next_button = page.locator(selectors.next_page)
-#             if current_page == const.max_page_per_category or next_button.count() == 0:
+#             if current_page == const.max_pages or next_button.count() == 0:
 #                 break
 #             # Goto next page
 #             next_button.click()
@@ -44,37 +133,37 @@ from config import const, selectors
 #     return book_urls
 
 
-async def book_urls_parser() -> list[str]:
-    """
-    Extract all book URLs using Playwright (async)
-    Returns:
-        list[str]: list of book URLs
-    """
-
-    book_urls = []
-    async with async_playwright() as pw:
-        browser = await pw.chromium.launch(headless=True)
-        page = await browser.new_page()
-        await page.goto(const.base_url)
-
-        current_page = 1
-        while True:
-            print(f'Extracting book URLs from page {current_page}')
-            page_urls = await page.locator(selectors.url_containers).evaluate_all(
-                'elements => elements.map(el => el.href)'
-            )
-            book_urls.extend(page_urls)
-
-            next_button = page.locator(selectors.next_page)
-            if current_page == const.max_page_per_category or next_button.count() == 0:
-                break
-
-            await next_button.click()
-            await page.wait_for_load_state(state='networkidle')
-            current_page += 1
-
-        await browser.close()
-    return book_urls
+# async def book_urls_parser() -> list[str]:
+#     """
+#     Extract all book URLs using Playwright (async)
+#     Returns:
+#         list[str]: list of book URLs
+#     """
+#
+#     book_urls = []
+#     async with async_playwright() as pw:
+#         browser = await pw.chromium.launch(headless=True)
+#         page = await browser.new_page()
+#         await page.goto(const.base_url)
+#
+#         current_page = 1
+#         while True:
+#             print(f'Extracting book URLs from page {current_page}')
+#             page_urls = await page.locator(selectors.url_containers).evaluate_all(
+#                 'elements => elements.map(el => el.href)'
+#             )
+#             book_urls.extend(page_urls)
+#
+#             next_button = page.locator(selectors.next_page)
+#             if current_page == const.max_pages or next_button.count() == 0:
+#                 break
+#
+#             await next_button.click()
+#             await page.wait_for_load_state(state='networkidle')
+#             current_page += 1
+#
+#         await browser.close()
+#     return book_urls
 
 
 # pylint: disable=too-many-locals

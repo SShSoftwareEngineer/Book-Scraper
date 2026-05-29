@@ -1,62 +1,70 @@
 """
-The module contains setting classes and constants for a web scraping or data parsing project.
+The module contains setting classes and constants for a web scraping or data parsing
+Application configuration using Pydantic v2 BaseSettings
+Reads from .env file and environment variables
 """
-
-import os
 from dataclasses import dataclass
-from dotenv import load_dotenv
 
-# Loading settings from .env
-load_dotenv()
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-@dataclass(frozen=True)
-class ProjConst:
+class ScraperSettings(BaseSettings):
     """ Class for storing project system settings from environment variables """
-    base_url: str = os.getenv('BASE_URL', '')
-    max_page_per_category: int = int(os.getenv('MAX_PAGE_PER_CATEGORY', '1'))
-    batch_size: int = int(os.getenv('BATCH_SIZE', '50'))
-    collect_interval: int = int(os.getenv('COLLECT_INTERVAL', '10'))  # in seconds
-    worker_count: int = int(os.getenv('WORKER_COUNT', '3'))
+    base_url: str = Field(default='', description='Base URL for scraping')
+    max_pages: int = Field(default=1, validation_alias='MAX_PAGE_PER_CATEGORY',
+                           description='Maximum pages to scrape per category')
+    batch_size: int = Field(default=50, description='Batch size for database writes')
+    collect_interval: float = Field(default=60.0, description='Interval in seconds between automatic database writes')
+    max_retries: int = Field(default=3, description='Maximum task retries')
+    worker_count: int = Field(default=3, description='Worker count')
+
+    model_config = SettingsConfigDict(env_file='.env', env_file_encoding='utf-8', )
 
 
-@dataclass(frozen=True)
-class DatabaseSettings:
+class DatabaseSettings(BaseSettings):
     """ Class for storing database settings from environment variables """
-    name: str = os.getenv('DB_NAME', '')
-    host: str = os.getenv('HOST', '')
-    port: int = int(os.getenv('PORT', '5432'))
-    user: str = os.getenv('USER', '')
-    password: str = os.getenv('PASSWORD', '')
+    name: str = Field(default='', description='Database name')
+    host: str = Field(default='localhost', description='Database host')
+    port: int = Field(default=5432, description='Database port')
+    user: str = Field(default='', description='Database user')
+    password: str = Field(default='', description='Database password')
+
+    model_config = SettingsConfigDict(env_file='.env', env_prefix='DB_', env_file_encoding='utf-8', )
 
 
-@dataclass(frozen=True)
-class RedisSettings:
+class RedisSettings(BaseSettings):
     """ Class for storing Redis settings """
-    host: str = os.getenv('REDIS_HOST', 'localhost')
-    port: int = int(os.getenv('REDIS_PORT', '6379'))
-    broker_db: int = int(os.getenv('REDIS_BROKER_DB', '0'))
-    backend_db: int = int(os.getenv('REDIS_BACKEND_DB', '1'))
-    cache_db: int = int(os.getenv('REDIS_CACHE_DB', '2'))
+    host: str = Field(default='localhost', description='Redis host')
+    port: int = Field(default=6379, description='Redis port')
+    broker_db: int = Field(default=0, description='Redis DB for task broker')
+    backend_db: int = Field(default=1, description='Redis DB for task results')
+    cache_db: int = Field(default=2, description='Redis DB for parsed books cache')
+
+    model_config = SettingsConfigDict(env_file='.env', env_prefix='REDIS_', env_file_encoding='utf-8', )
 
 
-@dataclass(frozen=True)
-class CelerySettings:
+class CelerySettings(BaseSettings):
     """ Class for storing celery settings """
-    broker_url: str = os.getenv('CELERY_BROKER_URL', 'redis://localhost:6379/0')
-    result_backend: str = os.getenv('CELERY_RESULT_BACKEND', 'redis://localhost:6379/1')
+    broker_url: str = Field(default='redis://localhost:6379/0', description='Celery broker URL')
+    result_backend: str = Field(default='redis://localhost:6379/1', description='Celery result backend URL')
+
+    model_config = SettingsConfigDict(env_file='.env', env_prefix='CELERY_', env_file_encoding='utf-8', )
 
 
-@dataclass(frozen=True)
-class LoggingSettings:
+class LoggingSettings(BaseSettings):
     """ Class for storing logging settings """
-    level: str = os.getenv('LOG_LEVEL', 'INFO')
+    level: str = Field(default='INFO', validation_alias='LOG_LEVEL',
+                       description='Log level (DEBUG, INFO, WARNING, ERROR)')
+
+    model_config = SettingsConfigDict(env_file='.env', env_file_encoding='utf-8', )
 
 
-@dataclass(frozen=True)
-class FlowerSettings:
+class FlowerSettings(BaseSettings):
     """ Class for storing flower settings """
-    port: int = int(os.getenv('FLOWER_PORT', '5555'))
+    port: int = Field(default=5555, validation_alias='FLOWER_PORT', description='Flower web UI port')
+
+    model_config = SettingsConfigDict(env_file='.env', env_file_encoding='utf-8', )
 
 
 # pylint: disable=too-many-instance-attributes
@@ -76,13 +84,16 @@ class Selectors:
 
 
 # Create instances of settings for use in the project
-const = ProjConst()
+scraper_settings = ScraperSettings()
 db_settings = DatabaseSettings()
 redis_settings = RedisSettings()
 celery_settings = CelerySettings()
 logging_settings = LoggingSettings()
 flower_settings = FlowerSettings()
 selectors = Selectors()
+
+# Alias for backward compatibility
+const = scraper_settings
 
 if __name__ == '__main__':
     pass
