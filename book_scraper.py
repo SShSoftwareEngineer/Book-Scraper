@@ -12,7 +12,7 @@ if platform.system() == 'Windows':
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", DeprecationWarning)
-        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+        asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
 
 from parsers import book_urls_parser
@@ -40,6 +40,7 @@ def main():
     print(f'Sending {len(book_urls)} parsing tasks to Celery workers...')
     tasks = []
     for i, url in enumerate(book_urls, 1):
+        # task = parse_book(url)
         task = parse_book.delay(url)
         tasks.append(task)
         if i % 10 == 0:

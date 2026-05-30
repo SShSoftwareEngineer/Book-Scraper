@@ -8,6 +8,12 @@ from dataclasses import dataclass
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+BASE_MODEL_CONFIG = {
+    'env_file': '.env',
+    'env_file_encoding': 'utf-8',
+    'extra': 'ignore'
+}
+
 
 class ScraperSettings(BaseSettings):
     """ Class for storing project system settings from environment variables """
@@ -19,7 +25,7 @@ class ScraperSettings(BaseSettings):
     max_retries: int = Field(default=3, description='Maximum task retries')
     worker_count: int = Field(default=3, description='Worker count')
 
-    model_config = SettingsConfigDict(env_file='.env', env_file_encoding='utf-8', )
+    model_config = SettingsConfigDict(**BASE_MODEL_CONFIG)
 
 
 class DatabaseSettings(BaseSettings):
@@ -30,7 +36,7 @@ class DatabaseSettings(BaseSettings):
     user: str = Field(default='', description='Database user')
     password: str = Field(default='', description='Database password')
 
-    model_config = SettingsConfigDict(env_file='.env', env_prefix='DB_', env_file_encoding='utf-8', )
+    model_config = SettingsConfigDict(**BASE_MODEL_CONFIG, env_prefix='DB_')
 
 
 class RedisSettings(BaseSettings):
@@ -41,7 +47,7 @@ class RedisSettings(BaseSettings):
     backend_db: int = Field(default=1, description='Redis DB for task results')
     cache_db: int = Field(default=2, description='Redis DB for parsed books cache')
 
-    model_config = SettingsConfigDict(env_file='.env', env_prefix='REDIS_', env_file_encoding='utf-8', )
+    model_config = SettingsConfigDict(**BASE_MODEL_CONFIG, env_prefix='REDIS_')
 
 
 class CelerySettings(BaseSettings):
@@ -49,22 +55,23 @@ class CelerySettings(BaseSettings):
     broker_url: str = Field(default='redis://localhost:6379/0', description='Celery broker URL')
     result_backend: str = Field(default='redis://localhost:6379/1', description='Celery result backend URL')
 
-    model_config = SettingsConfigDict(env_file='.env', env_prefix='CELERY_', env_file_encoding='utf-8', )
+    model_config = SettingsConfigDict(**BASE_MODEL_CONFIG, env_prefix='CELERY_')
 
 
 class LoggingSettings(BaseSettings):
     """ Class for storing logging settings """
-    level: str = Field(default='INFO', validation_alias='LOG_LEVEL',
-                       description='Log level (DEBUG, INFO, WARNING, ERROR)')
+    worker: str = Field(default='INFO', description='Log level (DEBUG, INFO, WARNING, ERROR)')
+    beat: str = Field(default='INFO', description='Log level (DEBUG, INFO, WARNING, ERROR)')
+    flower: str = Field(default='INFO', description='Log level (DEBUG, INFO, WARNING, ERROR)')
 
-    model_config = SettingsConfigDict(env_file='.env', env_file_encoding='utf-8', )
+    model_config = SettingsConfigDict(**BASE_MODEL_CONFIG, env_prefix='LOG_LEVEL_')
 
 
 class FlowerSettings(BaseSettings):
     """ Class for storing flower settings """
     port: int = Field(default=5555, validation_alias='FLOWER_PORT', description='Flower web UI port')
 
-    model_config = SettingsConfigDict(env_file='.env', env_file_encoding='utf-8', )
+    model_config = SettingsConfigDict(**BASE_MODEL_CONFIG)
 
 
 # pylint: disable=too-many-instance-attributes

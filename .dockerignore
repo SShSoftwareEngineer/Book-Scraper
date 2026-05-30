@@ -13,3 +13,8 @@ Notes/
 .env
 *.log
 .coverage
+
+# Celery Beat schedule local files
+celerybeat-schedule
+celerybeat-schedule-shm
+celerybeat-schedule-wal

@@ -14,7 +14,7 @@ if platform.system() == 'Windows':
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", DeprecationWarning)
         # asyncio.set_event_loop_policy() Deprecated since Python 3.14; will be removed in Python 3.16.
-        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+        asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
 from celery import Celery
 import redis

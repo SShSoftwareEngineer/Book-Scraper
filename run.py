@@ -6,7 +6,7 @@ Uses environment variables from config.py
 
 import socket
 from redis.exceptions import ConnectionError
-from config import redis_settings, logging_settings, flower_settings
+from config import redis_settings, logging_settings, flower_settings, const
 import sys
 import time
 import subprocess
@@ -66,14 +66,12 @@ def start_celery_worker(concurrency: int = 4) -> subprocess.Popen | None:
     Returns:
         Process object or None if failed
     """
-    loglevel = logging_settings.level
+    loglevel = logging_settings.worker
     print(f'Starting Celery Worker (concurrency={concurrency}, loglevel={loglevel})...')
 
     cmd = [
         'celery', '-A', 'celery_app', 'worker',
         f'--loglevel={loglevel}',
-        # '--loglevel=DEBUG',
-        # '--loglevel=info',
         f'--concurrency={concurrency}',
         '--pool=threads',  # Explicitly use threads for Windows compatibility
         f'--logfile=logs/worker.log',
@@ -107,7 +105,7 @@ def start_celery_beat() -> subprocess.Popen | None:
     Returns:
         Process object or None if failed
     """
-    loglevel = logging_settings.level
+    loglevel = logging_settings.beat
     print(f'Starting Celery Beat (loglevel={loglevel})...')
 
     cmd = [
@@ -144,7 +142,7 @@ def start_flower() -> subprocess.Popen | None:
         Process object or None if failed
     """
     port = flower_settings.port
-    loglevel = logging_settings.level
+    loglevel = logging_settings.flower
     print(f'Starting Flower (http://localhost:{port}, loglevel={loglevel})...')
 
     cmd = [
@@ -266,14 +264,14 @@ def main():
         # Запуск сервисов
         # Step 1: Check Redis
         if not check_redis():
-            print('️  Redis is not available!')
+            print('️   Redis is not available!')
             print('   Make sure Redis is running in Docker:')
-            print('   docker run -d -p 6379:6379 redis:8-alpine --name redis-book-scraper')
+            print('   docker run -d --name redis-book-scraper -p 6379:6379 redis:8-alpine')
             print('   Or check: docker ps\n')
             sys.exit(1)
 
         # Step 2: Start Celery services
-        worker_proc = start_celery_worker(concurrency=4)
+        worker_proc = start_celery_worker(concurrency=const.worker_count)
         if not worker_proc:
             sys.exit(1)
         processes.append(worker_proc)
@@ -325,9 +323,10 @@ def main():
             time.sleep(1)
 
     except KeyboardInterrupt:
-        cleanup()
+        pass # cleanup()
     except Exception as e:
         print(f'\nFatal error: {e}')
+    finally:
         cleanup()
 
 
