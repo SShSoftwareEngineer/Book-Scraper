@@ -7,7 +7,7 @@ import asyncio
 import platform
 
 # CRITICAL: Set event loop policy BEFORE any async code
-if platform.system() == 'Windows':
+if platform.system() in ['Windows','win32']:
     import warnings
 
     with warnings.catch_warnings():

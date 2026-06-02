@@ -10,7 +10,7 @@ import asyncio
 import platform
 
 # Установить политику перед созданием loop
-if platform.system() == 'Windows':
+if platform.system() in ['Windows','win32']:
     import warnings
 
     with warnings.catch_warnings():

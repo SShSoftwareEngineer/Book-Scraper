@@ -8,7 +8,7 @@ import asyncio
 import platform
 
 # CRITICAL: Set event loop policy BEFORE any Playwright imports
-if platform.system() == 'Windows':
+if platform.system() in ['Windows','win32']:
     import warnings
 
     with warnings.catch_warnings():
@@ -24,7 +24,7 @@ from config import redis_settings, celery_settings, logging_settings, scraper_se
 app = Celery('book_scraper')
 
 # Windows-specific configuration
-if platform.system() == 'Windows':
+if platform.system() in ['Windows','win32']:
     os.environ['FORKED_BY_MULTIPROCESSING'] = '1'
 
 # Main Celery configuration
@@ -54,7 +54,7 @@ app.conf.update(
     task_soft_time_limit=550,  # Warn task at 9:10 minutes
 
     # Worker pool - use 'threads' for Windows + async compatibility
-    worker_pool='threads' if platform.system() == 'Windows' else 'prefork',
+    worker_pool='threads' if platform.system() in ['Windows','win32'] else 'prefork',
     worker_max_tasks_per_child=100,
 
     # Periodic tasks schedule

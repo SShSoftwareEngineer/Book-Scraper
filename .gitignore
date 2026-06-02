@@ -165,7 +165,7 @@ cython_debug/
 
 
 # Celery Beat schedule files
-celerybeat-schedule
+celerybeat-schedule*
 celerybeat-schedule-shm
 celerybeat-schedule-wal
 
