@@ -5,14 +5,14 @@ Uses environment variables from config.py
 """
 
 import socket
-from redis.exceptions import ConnectionError
-from config import redis_settings, logging_settings, flower_settings, const
 import sys
 import time
 import subprocess
 import signal
 from pathlib import Path
-from redis import Redis
+from redis.exceptions import ConnectionError as RedisConnectionError  # pylint: disable=import-error
+from redis import Redis  # pylint: disable=import-error
+from config import redis_settings, logging_settings, flower_settings, const
 
 # Create logs directory
 Path('logs').mkdir(exist_ok=True)
@@ -38,23 +38,22 @@ def check_redis() -> bool | None:
     Returns True if Redis is available, False otherwise
     """
     print('Checking Redis...')
-
+    result = None
     try:
         # Подключаемся к Redis на localhost (порт проброшен из Docker)
         client = Redis(
             host=redis_settings.host,
             port=redis_settings.port,
             socket_timeout=2,
-            socket_connect_timeout=2
+            socket_connect_timeout=2 # type: ignore
         )
-
         if client.ping():
             print('Redis is running and responding\n')
-            return True
-
-    except (ConnectionError, OSError) as e:
+            result = True
+    except (RedisConnectionError, OSError) as e:
         print(f'Redis connection failed: {e}\n')
-        return False
+        result = False
+    return result
 
 
 def start_celery_worker(concurrency: int = 4) -> subprocess.Popen | None:
@@ -74,26 +73,24 @@ def start_celery_worker(concurrency: int = 4) -> subprocess.Popen | None:
         f'--loglevel={loglevel}',
         f'--concurrency={concurrency}',
         '--pool=threads',  # Explicitly use threads for Windows compatibility
-        f'--logfile=logs/worker.log',
+        '--logfile=logs/worker.log',
         '--time-limit=300',  # Kill task if it takes >10 minutes
         '--soft-time-limit=240',  # Warn task at 4:00 minutes
     ]
 
     try:
-        proc = subprocess.Popen(cmd)
+        proc = subprocess.Popen(cmd)  # pylint: disable=consider-using-with
         time.sleep(2)  # Give worker time to start
 
         if proc.poll() is None:  # Process still running
-            print('Celery Worker started (PID: {})\n'.format(proc.pid))
+            print(f'Celery Worker started (PID: {proc.pid})\n')
             return proc
-        else:
-            print('Celery Worker failed to start\n')
-            return None
-
+        print('Celery Worker failed to start\n')
+        return None
     except FileNotFoundError:
         print('Celery not found. Install with: pip install celery\n')
         return None
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         print(f'Error starting worker: {e}\n')
         return None
 
@@ -111,25 +108,23 @@ def start_celery_beat() -> subprocess.Popen | None:
     cmd = [
         'celery', '-A', 'celery_app', 'beat',
         f'--loglevel={loglevel}',
-        f'--logfile=logs/beat.log',
+        '--logfile=logs/beat.log',
         '--scheduler=celery.beat:PersistentScheduler',  # Persistent scheduler
     ]
 
     try:
-        proc = subprocess.Popen(cmd)
+        proc = subprocess.Popen(cmd)  # pylint: disable=consider-using-with
         time.sleep(1)
 
         if proc.poll() is None:
-            print('Celery Beat started (PID: {})\n'.format(proc.pid))
+            print(f'Celery Beat started (PID: {proc.pid})\n')
             return proc
-        else:
-            print('Celery Beat failed to start\n')
-            return None
-
+        print('Celery Beat failed to start\n')
+        return None
     except FileNotFoundError:
         print('Celery not found\n')
         return None
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         print(f'Error starting beat: {e}\n')
         return None
 
@@ -152,20 +147,18 @@ def start_flower() -> subprocess.Popen | None:
     ]
 
     try:
-        proc = subprocess.Popen(cmd)
+        proc = subprocess.Popen(cmd)  # pylint: disable=consider-using-with
         time.sleep(2)
 
         if proc.poll() is None:
-            print('Flower started (PID: {})\n'.format(proc.pid))
+            print(f'Flower started (PID: {proc.pid})\n')
             return proc
-        else:
-            print('Flower failed to start\n')
-            return None
-
+        print('Flower failed to start\n')
+        return None
     except FileNotFoundError:
         print('Flower not found. Install with: pip install flower\n')
         return None
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         print(f'Error starting flower: {e}\n')
         return None
 
@@ -187,8 +180,16 @@ def run_scraper() -> int:
             check=False
         )
         return result.returncode
-
-    except Exception as e:
+    except FileNotFoundError as e:
+        print(f"Error: Скрипт 'book_scraper.py' не найден по указанному пути. [{e}]")
+        return 1
+    except PermissionError as err:
+        print(f"Error: Нет прав на исполнение процесса. [{err}]")
+        return 1
+    except subprocess.SubprocessError as err:
+        print(f"Error running scraper (internal subprocess error): {err}")
+        return 1
+    except Exception as e:  # pylint: disable=broad-exception-caught
         print(f'Error running scraper: {e}')
         return 1
 
@@ -199,12 +200,12 @@ def print_status() -> None:
     print('SERVICES STATUS')
     print('=' * 70)
     print(f'Redis:          {"Running" if check_redis() else "Not running"}')
-    print(
-        f'Celery Worker:  {"Running" if len(processes) > 0 and processes[0] and processes[0].poll() is None else "Not running"}')
-    print(
-        f'Celery Beat:    {"Running" if len(processes) > 1 and processes[1] and processes[1].poll() is None else "Not running"}')
-    print(
-        f'Flower:         {"Running" if len(processes) > 2 and processes[2] and processes[2].poll() is None else "Not running"}')
+    print(f'Celery Worker: '
+          f' {"Running" if len(processes) > 0 and processes[0] and processes[0].poll() is None else "Not running"}')
+    print(f'Celery Beat:   '
+          f' {"Running" if len(processes) > 1 and processes[1] and processes[1].poll() is None else "Not running"}')
+    print(f'Flower:        '
+          f' {"Running" if len(processes) > 2 and processes[2] and processes[2].poll() is None else "Not running"}')
     print('=' * 70 + '\n')
 
     print('Access URLs:')
@@ -213,7 +214,7 @@ def print_status() -> None:
     print('   - Logs:       ./logs/\n')
 
 
-def cleanup(signum=None, frame=None) -> None:
+def cleanup(_signum=None, _frame=None) -> None:
     """
     Gracefully shutdown all processes
     Called on SIGINT (Ctrl+C) or SIGTERM
@@ -241,16 +242,17 @@ def cleanup(signum=None, frame=None) -> None:
                     proc.wait()
                     print(f'Process {i + 1} killed')
 
-            except Exception as e:
-                print(f'Error stopping process {i + 1}: {e}')
+            except OSError as err:
+                print(f'Error stopping process {i + 1}: {err}')
 
     print('\nAll services stopped')
     print('=' * 70)
     sys.exit(0)
 
 
+# pylint: disable=too-many-statements
 def main():
-    """Main execution flow"""
+    """ Main execution flow """
 
     # Register signal handlers for graceful shutdown
     signal.signal(signal.SIGINT, cleanup)
@@ -321,10 +323,9 @@ def main():
         # Keep services running until user interrupts
         while True:
             time.sleep(1)
-
     except KeyboardInterrupt:
-        pass # cleanup()
-    except Exception as e:
+        pass  # cleanup()
+    except Exception as e:  # pylint: disable=broad-exception-caught
         print(f'\nFatal error: {e}')
     finally:
         cleanup()

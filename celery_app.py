@@ -9,16 +9,18 @@ import platform
 
 # CRITICAL: Set event loop policy BEFORE any Playwright imports
 if platform.system() in ['Windows','win32']:
+    # TODO: Windows async subprocess support - deprecated since Python 3.14; will be removed in Python 3.16.
+    # Remove when Playwright supports Windows without ProactorEventLoopPolicy
     import warnings
 
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", DeprecationWarning)
-        # asyncio.set_event_loop_policy() Deprecated since Python 3.14; will be removed in Python 3.16.
-        asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+    with warnings.catch_warnings(): # type: ignore
+        warnings.simplefilter("ignore", category=DeprecationWarning)
+        # pylint: disable=deprecated-class
+        asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy()) # type: ignore[attr-defined]
 
-from celery import Celery
-import redis
-from config import redis_settings, celery_settings, logging_settings, scraper_settings, const
+from celery import Celery # pylint: disable=wrong-import-position, disable=import-error
+import redis # pylint: disable=wrong-import-position, disable=import-error
+from config import redis_settings, scraper_settings # pylint: disable=wrong-import-position
 
 # Initialize Celery app
 app = Celery('book_scraper')
@@ -71,7 +73,7 @@ cache = redis.Redis(
     host=redis_settings.host,
     port=redis_settings.port,
     db=redis_settings.cache_db,
-    decode_responses=True  # Auto decode bytes to strings
+    decode_responses=True  # type: ignore   # Auto decode bytes to strings
 )
 
 if __name__ == '__main__':

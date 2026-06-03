@@ -11,17 +11,21 @@ import platform
 
 # Установить политику перед созданием loop
 if platform.system() in ['Windows','win32']:
+    # TODO: Windows async subprocess support - deprecated since Python 3.14; will be removed in Python 3.16.
+    # Remove when Playwright supports Windows without ProactorEventLoopPolicy
     import warnings
 
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", DeprecationWarning)
-        asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+    with warnings.catch_warnings(): # type: ignore
+        warnings.simplefilter("ignore", category=DeprecationWarning)
+        # pylint: disable=deprecated-class
+        asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy()) # type: ignore[attr-defined]
 
-import http
-from playwright.async_api import async_playwright
-from config import const, selectors
+import http # pylint: disable=wrong-import-position
+from playwright.async_api import async_playwright # pylint: disable=wrong-import-position, disable=import-error
+from config import const, selectors # pylint: disable=wrong-import-position
 
 
+# pylint: disable=too-many-locals
 async def book_parser_async(page, url: str, worker_id: str) -> dict | None:
     """
     Async parsing of single book details using Playwright (async version for Celery)
@@ -86,7 +90,7 @@ async def book_parser_async(page, url: str, worker_id: str) -> dict | None:
                     'product_info': product_info,
                     'url': url
                 }
-    except Exception as e:
+    except Exception as e: # pylint: disable=broad-exception-caught
         report = f'Worker {worker_id} error parsing {url}: {str(e)[:100]}'
     print(report)
     return result if result else None

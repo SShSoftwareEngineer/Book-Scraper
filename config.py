@@ -6,7 +6,7 @@ Reads from .env file and environment variables
 from dataclasses import dataclass
 
 from pydantic import Field
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, SettingsConfigDict # type: ignore[import-not-found]
 
 BASE_MODEL_CONFIG = {
     'env_file': '.env',
@@ -15,6 +15,7 @@ BASE_MODEL_CONFIG = {
 }
 
 
+# pylint: disable=too-few-public-methods
 class ScraperSettings(BaseSettings):
     """ Class for storing project system settings from environment variables """
     base_url: str = Field(default='', description='Base URL for scraping')
@@ -28,6 +29,7 @@ class ScraperSettings(BaseSettings):
     model_config = SettingsConfigDict(**BASE_MODEL_CONFIG)
 
 
+# pylint: disable=too-few-public-methods
 class DatabaseSettings(BaseSettings):
     """ Class for storing database settings from environment variables """
     name: str = Field(default='', description='Database name')
@@ -39,6 +41,7 @@ class DatabaseSettings(BaseSettings):
     model_config = SettingsConfigDict(**BASE_MODEL_CONFIG, env_prefix='DB_')
 
 
+# pylint: disable=too-few-public-methods
 class RedisSettings(BaseSettings):
     """ Class for storing Redis settings """
     host: str = Field(default='localhost', description='Redis host')
@@ -50,6 +53,7 @@ class RedisSettings(BaseSettings):
     model_config = SettingsConfigDict(**BASE_MODEL_CONFIG, env_prefix='REDIS_')
 
 
+# pylint: disable=too-few-public-methods
 class CelerySettings(BaseSettings):
     """ Class for storing celery settings """
     broker_url: str = Field(default='redis://localhost:6379/0', description='Celery broker URL')
@@ -58,6 +62,7 @@ class CelerySettings(BaseSettings):
     model_config = SettingsConfigDict(**BASE_MODEL_CONFIG, env_prefix='CELERY_')
 
 
+# pylint: disable=too-few-public-methods
 class LoggingSettings(BaseSettings):
     """ Class for storing logging settings """
     worker: str = Field(default='INFO', description='Log level (DEBUG, INFO, WARNING, ERROR)')
@@ -67,6 +72,7 @@ class LoggingSettings(BaseSettings):
     model_config = SettingsConfigDict(**BASE_MODEL_CONFIG, env_prefix='LOG_LEVEL_')
 
 
+# pylint: disable=too-few-public-methods
 class FlowerSettings(BaseSettings):
     """ Class for storing flower settings """
     port: int = Field(default=5555, validation_alias='FLOWER_PORT', description='Flower web UI port')

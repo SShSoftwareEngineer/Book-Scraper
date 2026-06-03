@@ -6,11 +6,10 @@ Optimized for Windows + Redis + Celery
 import json
 import asyncio
 import threading
-from celery import Task
-from playwright.async_api import async_playwright
-import psycopg2
-from psycopg2.extras import Json
-
+from celery import Task  # pylint: disable=import-error
+from playwright.async_api import async_playwright  # pylint: disable=import-error
+import psycopg2  # pylint: disable=import-error
+from psycopg2.extras import Json  # pylint: disable=import-error
 from celery_app import app, cache
 from config import const, db_settings
 from parsers import book_parser_async
@@ -33,12 +32,13 @@ def get_event_loop():
 
 
 class DatabaseTask(Task):
-    """Base task with database connection"""
+    """ Base task with database connection """
     _db_connection = None
     _db_cursor = None
 
     @property
     def db_connection(self):
+        """ Create database connection """
         if self._db_connection is None:
             connection_string = (
                 f'dbname={db_settings.name} host={db_settings.host} '
@@ -49,6 +49,7 @@ class DatabaseTask(Task):
 
     @property
     def db_cursor(self):
+        """ Create database cursor and table if needed """
         if self._db_cursor is None:
             self._db_cursor = self.db_connection.cursor()
             # Create table if not exists
@@ -97,8 +98,8 @@ async def parse_book_async(url: str, worker_id: str) -> dict | None:
     except asyncio.TimeoutError:
         print(f'Worker {worker_id} Timeout parsing: {url}')
         return None
-    except Exception as exc:
-        print(f'Worker {worker_id} Error parsing {url}: {exc}')
+    except Exception as err:  # pylint: disable=broad-exception-caught
+        print(f'Worker {worker_id} Error parsing {url}: {err}')
         return None
 
 
@@ -163,8 +164,15 @@ def bulk_save_to_db(self, task_ids: list):
             continue
 
         try:
-            book = json.loads(book_json)
+            # 1. Сначала безопасно парсим JSON
+            try:
+                book = json.loads(book_json)
+            except json.JSONDecodeError as json_err:
+                print(f"Scraper data error (Invalid JSON): {json_err}")
+                # Здесь мы просто пропускаем битую книгу, rollback делать не нужно
+                continue
 
+            # 2. Выполняем операцию с базой данных
             self.db_cursor.execute("""
                                    INSERT INTO books (title, category, price, rating, available,
                                                       image_url, description, product_info, url)
@@ -186,10 +194,10 @@ def bulk_save_to_db(self, task_ids: list):
             saved_count += 1
             cache.delete(cache_key)
 
-        except Exception as err:
-            print(f'Database write error: {err}')
+        # Перехватываем специализированные ошибки PostgreSQL
+        except psycopg2.DatabaseError as db_err:
+            print(f"Database write error: {db_err}")
             self.db_connection.rollback()
-            error_count += 1
 
     print(f'Saved {saved_count} books to database ({error_count} errors)')
     return saved_count
