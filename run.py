@@ -10,6 +10,7 @@ import time
 import subprocess
 import signal
 from pathlib import Path
+
 from redis.exceptions import ConnectionError as RedisConnectionError  # pylint: disable=import-error
 from redis import Redis  # pylint: disable=import-error
 from config import redis_settings, logging_settings, flower_settings, const
@@ -45,13 +46,14 @@ def check_redis() -> bool | None:
             host=redis_settings.host,
             port=redis_settings.port,
             socket_timeout=2,
-            socket_connect_timeout=2 # type: ignore
+            socket_connect_timeout=2,
+            decode_responses=True,
         )
         if client.ping():
             print('Redis is running and responding\n')
             result = True
-    except (RedisConnectionError, OSError) as e:
-        print(f'Redis connection failed: {e}\n')
+    except (RedisConnectionError, OSError) as err:
+        print(f'Redis connection failed: {err}\n')
         result = False
     return result
 
@@ -324,9 +326,9 @@ def main():
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
-        pass  # cleanup()
-    except Exception as e:  # pylint: disable=broad-exception-caught
-        print(f'\nFatal error: {e}')
+        cleanup()
+    except Exception as err:  # pylint: disable=broad-exception-caught
+        print(f'\nFatal error: {err}')
     finally:
         cleanup()
 
