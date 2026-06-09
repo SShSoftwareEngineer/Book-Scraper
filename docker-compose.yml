@@ -10,7 +10,7 @@ services:
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -30,7 +30,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER}"]
+      test: [ "CMD-SHELL", "pg_isready -U ${DB_USER}" ]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -57,6 +57,8 @@ services:
         condition: service_healthy
     volumes:
       - ./logs:/app/logs
+    networks:
+      - book-scraper-network
 
   # Celery Beat - periodic tasks
   celery_beat:
@@ -92,7 +94,7 @@ services:
       - REDIS_PORT=6379
     depends_on:
       - redis
-      - celery-worker
+      - celery_worker
     ports:
       - "5555:5555"
     volumes:
