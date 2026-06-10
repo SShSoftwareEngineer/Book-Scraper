@@ -87,7 +87,6 @@ async def parse_book_async(url: str, worker_id: str) -> dict | None:
         async with async_playwright() as pw:
             browser = await pw.chromium.launch(headless=True)
             page = await browser.new_page()
-            await page.goto(url, wait_until='networkidle', timeout=30000)
 
             # Parse book using your async parser
             book = await book_parser_async(page, url, worker_id)
@@ -213,7 +212,7 @@ def collect_and_save():
     """
     # Get all book cache keys
     pattern = 'book:*'
-    book_keys = cache.keys(pattern)
+    book_keys = list(cache.scan_iter(match='book:*', count=100))
 
     if not book_keys:
         return 0
