@@ -15,10 +15,12 @@ if platform.system() in ['Windows', 'win32']:
     with warnings.catch_warnings():  # type: ignore
         warnings.simplefilter("ignore", category=DeprecationWarning)
         # pylint: disable=deprecated-class
-        asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy()) # type: ignore[attr-defined]
+        asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())  # type: ignore[attr-defined]
 
 from parsers import book_urls_parser  # pylint: disable=wrong-import-position
 from tasks import parse_book, collect_and_save  # pylint: disable=wrong-import-position
+from celery.result import AsyncResult
+from celery_app import app
 
 
 def main():
@@ -28,7 +30,7 @@ def main():
     print('Extracting book URLs...')
 
     try:
-        book_urls: list[str] = book_urls_parser() # type: ignore[annotation-unchecked]
+        book_urls: list[str] = book_urls_parser()  # type: ignore[annotation-unchecked]
         print(f'✓ {len(book_urls)} book URLs extracted\n')
     except (asyncio.TimeoutError, asyncio.CancelledError) as err:
         print(f'✗ Failed to extract URLs: {err}')
@@ -77,10 +79,15 @@ def main():
     # Final flush - save any remaining books in cache
     print('Flushing remaining books to database...')
     try:
-        collect_and_save.delay()
-        print('✓ Database write task submitted\n')
+        flush_task = collect_and_save.delay()
+        batch_task_ids = flush_task.get(timeout=60)
+
+        for task_id in batch_task_ids:
+            AsyncResult(task_id, app=app).get(timeout=60)
+
+        print('✓ Database write completed\n')
     except Exception as exc:  # pylint: disable=broad-exception-caught
-        print(f'✗ Failed to submit database write task: {exc}\n')
+        print(f'✗ Database write failed or timed out: {exc}\n')
 
     print('Monitoring tasks via Flower:')
     print('  URL: http://localhost:5555')

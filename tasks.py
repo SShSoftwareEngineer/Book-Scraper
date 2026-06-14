@@ -9,13 +9,41 @@ import threading
 from celery import Task  # pylint: disable=import-error
 from playwright.async_api import async_playwright  # pylint: disable=import-error
 import psycopg2  # pylint: disable=import-error
-from psycopg2.extras import Json  # pylint: disable=import-error
+from psycopg2.extras import Json, execute_batch  # pylint: disable=import-error
 from celery_app import app, cache
 from config import const, db_settings
-from parsers import book_parser_async
+from parsers import parse_book_page
 
 # Thread-local storage for Playwright instances (one per thread)
 _thread_local = threading.local()
+
+
+async def get_browser_context():
+    """Get or create Playwright browser context for current Celery worker thread."""
+    context = getattr(_thread_local, 'context', None)
+    if context is not None:
+        return context
+    playwright = None
+    browser = None
+
+    try:
+        playwright = await async_playwright().start()
+        browser = await playwright.chromium.launch(headless=True)
+        context = await browser.new_context()
+    except Exception:
+        if browser is not None:
+            await browser.close()
+        if playwright is not None:
+            await playwright.stop()
+        for attr in ('playwright', 'browser', 'context'):
+            if hasattr(_thread_local, attr):
+                delattr(_thread_local, attr)
+        raise
+
+    _thread_local.playwright = playwright
+    _thread_local.browser = browser
+    _thread_local.context = context
+    return context
 
 
 def get_event_loop():
@@ -72,7 +100,7 @@ class DatabaseTask(Task):
         return self._db_cursor
 
 
-async def parse_book_async(url: str, worker_id: str) -> dict | None:
+async def scrape_book_with_browser(url: str, worker_id: str) -> dict | None:
     """
     Parse single book using async Playwright
 
@@ -83,16 +111,14 @@ async def parse_book_async(url: str, worker_id: str) -> dict | None:
     Returns:
         dict: Parsed book data or None if failed
     """
+    page = None
     try:
-        async with async_playwright() as pw:
-            browser = await pw.chromium.launch(headless=True)
-            page = await browser.new_page()
+        context = await get_browser_context()
+        page = await context.new_page()
 
-            # Parse book using your async parser
-            book = await book_parser_async(page, url, worker_id)
-
-            await browser.close()
-            return book
+        # Parse book using your async parser
+        book = await parse_book_page(page, url, worker_id)
+        return book
 
     except asyncio.TimeoutError:
         print(f'Worker {worker_id} Timeout parsing: {url}')
@@ -100,6 +126,9 @@ async def parse_book_async(url: str, worker_id: str) -> dict | None:
     except Exception as err:  # pylint: disable=broad-exception-caught
         print(f'Worker {worker_id} Error parsing {url}: {err}')
         return None
+    finally:
+        if page:
+            await page.close()
 
 
 @app.task(bind=True, max_retries=const.max_retries, default_retry_delay=5)
@@ -121,7 +150,7 @@ def parse_book(self, url: str):
         loop = get_event_loop()
 
         # Run async parser in thread's event loop
-        book = loop.run_until_complete(parse_book_async(url, worker_id))
+        book = loop.run_until_complete(scrape_book_with_browser(url, worker_id))
 
         if book:
             # Store in Redis cache with task_id as key
@@ -152,7 +181,8 @@ def bulk_save_to_db(self, task_ids: list):
     if not task_ids:
         return 0
 
-    saved_count = 0
+    batch_buffer = []
+    cache_keys_to_delete = []
     error_count = 0
 
     for task_id in task_ids:
@@ -167,37 +197,49 @@ def bulk_save_to_db(self, task_ids: list):
             try:
                 book = json.loads(book_json)
             except json.JSONDecodeError as json_err:
+                error_count += 1
                 print(f"Scraper data error (Invalid JSON): {json_err}")
                 # Здесь мы просто пропускаем битую книгу, rollback делать не нужно
                 continue
 
             # 2. Выполняем операцию с базой данных
-            self.db_cursor.execute("""
-                                   INSERT INTO books (title, category, price, rating, available,
-                                                      image_url, description, product_info, url)
-                                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-                                   ON CONFLICT (url) DO NOTHING
-                                   """, (
-                                       book.get('title'),
-                                       book.get('category'),
-                                       book.get('price'),
-                                       book.get('rating'),
-                                       book.get('available'),
-                                       book.get('image_url'),
-                                       book.get('description'),
-                                       Json(book.get('product_info')),
-                                       book.get('url')
-                                   ))
+
+            batch_buffer.append((
+                book.get('title'),
+                book.get('category'),
+                book.get('price'),
+                book.get('rating'),
+                book.get('available'),
+                book.get('image_url'),
+                book.get('description'),
+                Json(book.get('product_info')),
+                book.get('url')
+            ))
+            cache_keys_to_delete.append(cache_key)
+
+            if not batch_buffer:
+                print(f'Saved 0 books to database ({error_count} errors)')
+                return 0
+
+            execute_batch(self.db_cursor, """
+                                          INSERT INTO books (title, category, price, rating, available,
+                                                             image_url, description, product_info, url)
+                                          VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                          ON CONFLICT (url) DO NOTHING
+                                          """, batch_buffer)
 
             self.db_connection.commit()
-            saved_count += 1
-            cache.delete(cache_key)
+            if cache_keys_to_delete:
+                cache.delete(*cache_keys_to_delete)
 
         # Перехватываем специализированные ошибки PostgreSQL
         except psycopg2.DatabaseError as db_err:
+            error_count += len(batch_buffer)
             print(f"Database write error: {db_err}")
             self.db_connection.rollback()
+            return 0
 
+    saved_count = len(batch_buffer)
     print(f'Saved {saved_count} books to database ({error_count} errors)')
     return saved_count
 
@@ -212,10 +254,10 @@ def collect_and_save():
     """
     # Get all book cache keys
     pattern = 'book:*'
-    book_keys = list(cache.scan_iter(match='book:*', count=100))
+    book_keys = list(cache.scan_iter(match=pattern, count=100))
 
     if not book_keys:
-        return 0
+        return []
 
     # Extract task IDs from keys
     task_ids = [key.split(':')[1] for key in book_keys]
@@ -227,10 +269,11 @@ def collect_and_save():
     print(f'Collecting {len(task_ids)} books in {len(batches)} batches')
 
     # Send each batch to database writer
+    batch_task_ids = []
     for batch in batches:
-        bulk_save_to_db.delay(batch)
-
-    return len(batches)
+        result = bulk_save_to_db.delay(batch)
+        batch_task_ids.append(result.id)
+    return batch_task_ids
 
 
 if __name__ == '__main__':

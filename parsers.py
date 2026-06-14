@@ -26,7 +26,7 @@ from config import const, selectors # pylint: disable=wrong-import-position
 
 
 # pylint: disable=too-many-locals
-async def book_parser_async(page, url: str, worker_id: str) -> dict | None:
+async def parse_book_page(page, url: str, worker_id: str) -> dict | None:
     """
     Async parsing of single book details using Playwright (async version for Celery)
 
@@ -91,7 +91,9 @@ async def book_parser_async(page, url: str, worker_id: str) -> dict | None:
                     'url': url
                 }
     except Exception as e: # pylint: disable=broad-exception-caught
-        report = f'Worker {worker_id} error parsing {url}: {str(e)[:100]}'
+        report =f'Worker {worker_id} error parsing {url}: {type(e).__name__}: {e!r}'
+        print(report)
+        raise
     print(report)
     return result if result else None
 
