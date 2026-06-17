@@ -59,6 +59,7 @@ def get_event_loop():
     return loop
 
 
+# pylint: disable=abstract-method
 class DatabaseTask(Task):
     """ Base task with database connection """
     _db_connection = None
@@ -167,7 +168,7 @@ def parse_book(self, url: str):
 
 
 @app.task(base=DatabaseTask, bind=True)
-def bulk_save_to_db(self, task_ids: list):
+def bulk_save_to_db(self, task_ids: list[str]) -> int:
     """
     Save batch of books from Redis cache to PostgreSQL
 
@@ -192,52 +193,50 @@ def bulk_save_to_db(self, task_ids: list):
         if not book_json:
             continue
 
+        # 1. Сначала безопасно парсим JSON
         try:
-            # 1. Сначала безопасно парсим JSON
-            try:
-                book = json.loads(book_json)
-            except json.JSONDecodeError as json_err:
-                error_count += 1
-                print(f"Scraper data error (Invalid JSON): {json_err}")
-                # Здесь мы просто пропускаем битую книгу, rollback делать не нужно
-                continue
+            book = json.loads(book_json)
+        except json.JSONDecodeError as json_err:
+            error_count += 1
+            print(f'Scraper data error (Invalid JSON): {json_err}')
+            # Здесь мы просто пропускаем битую книгу, rollback делать не нужно
+            continue
 
-            # 2. Выполняем операцию с базой данных
+        batch_buffer.append((
+            book.get('title'),
+            book.get('category'),
+            book.get('price'),
+            book.get('rating'),
+            book.get('available'),
+            book.get('image_url'),
+            book.get('description'),
+            Json(book.get('product_info')),
+            book.get('url')
+        ))
+        cache_keys_to_delete.append(cache_key)
 
-            batch_buffer.append((
-                book.get('title'),
-                book.get('category'),
-                book.get('price'),
-                book.get('rating'),
-                book.get('available'),
-                book.get('image_url'),
-                book.get('description'),
-                Json(book.get('product_info')),
-                book.get('url')
-            ))
-            cache_keys_to_delete.append(cache_key)
+    if not batch_buffer:
+        print(f'Saved 0 books to database ({error_count} errors)')
+        return 0
 
-            if not batch_buffer:
-                print(f'Saved 0 books to database ({error_count} errors)')
-                return 0
+    # 2. Выполняем операцию с базой данных
+    try:
+        execute_batch(self.db_cursor, """
+                                      INSERT INTO books (title, category, price, rating, available,
+                                                         image_url, description, product_info, url)
+                                      VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                      ON CONFLICT (url) DO NOTHING
+                                      """, batch_buffer)
 
-            execute_batch(self.db_cursor, """
-                                          INSERT INTO books (title, category, price, rating, available,
-                                                             image_url, description, product_info, url)
-                                          VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-                                          ON CONFLICT (url) DO NOTHING
-                                          """, batch_buffer)
-
-            self.db_connection.commit()
-            if cache_keys_to_delete:
-                cache.delete(*cache_keys_to_delete)
-
-        # Перехватываем специализированные ошибки PostgreSQL
-        except psycopg2.DatabaseError as db_err:
-            error_count += len(batch_buffer)
-            print(f"Database write error: {db_err}")
-            self.db_connection.rollback()
-            return 0
+        self.db_connection.commit()
+        if cache_keys_to_delete:
+            cache.delete(*cache_keys_to_delete)
+    # Перехватываем специализированные ошибки PostgreSQL
+    except psycopg2.DatabaseError as db_err:
+        error_count += len(batch_buffer)
+        print(f'Database write error: {db_err}')
+        self.db_connection.rollback()
+        return 0
 
     saved_count = len(batch_buffer)
     print(f'Saved {saved_count} books to database ({error_count} errors)')
@@ -245,12 +244,12 @@ def bulk_save_to_db(self, task_ids: list):
 
 
 @app.task
-def collect_and_save():
+def collect_and_save()-> list[str]:
     """
     Periodic task: collect parsed books from Redis and save to database in batches
 
     Returns:
-        int: Number of batches sent to database
+        list[str]: IDs of database write tasks
     """
     # Get all book cache keys
     pattern = 'book:*'

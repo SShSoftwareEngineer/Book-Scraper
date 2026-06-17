@@ -4,7 +4,6 @@ Application configuration using Pydantic v2 BaseSettings
 Reads from .env file and environment variables
 """
 from dataclasses import dataclass
-
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict # type: ignore[import-not-found]
 

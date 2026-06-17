@@ -19,39 +19,10 @@ FROM python:3.14-slim
 
 WORKDIR /app
 
-# Install runtime dependencies (Playwright needs extra packages)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libgconf-2-4 \
-    libatk1.0-0 \
-    libatk-bridge2.0-0 \
-    libcups2 \
-    libdrm2 \
-    libxkbcommon0 \
-    libxrandr2 \
-    libxinerama1 \
-    libxi6 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxfixes3 \
-    libxext6 \
-    libxrender1 \
-    libgbm1 \
-    libnspr4 \
-    libnss3 \
-    libpango-1.0-0 \
-    libpangocairo-1.0-0 \
-    libpixman-1-0 \
-    libxss1 \
-    libasound2 \
-    libexpat1 \
-    libssl3 \
-    libfontconfig1 \
-    && rm -rf /var/lib/apt/lists/*
-
 # Copy virtual environment from builder
 COPY --from=builder /app/.venv /app/.venv
 
-# Копируй весь код
+# Copy application code
 COPY . .
 
 # Set environment variables
@@ -62,16 +33,16 @@ ENV PATH="/app/.venv/bin:$PATH" \
 # Create logs directory
 RUN mkdir -p logs
 
-# Install Playwright browsers
-RUN playwright install chromium
+# Install Chromium and all system dependencies automatically
+RUN apt-get update && \
+    playwright install --with-deps chromium && \
+    rm -rf /var/lib/apt/lists/* \
 
 # Expose ports
-EXPOSE 5555 6379
+EXPOSE 5555
 
 # Default command: run the launcher
-CMD ["python", "run.py"]
-
-#CMD ["python", "book_scraper.py"]
+CMD ["python", "book_scraper.py"]
 
 # Available commands:
 # docker run ... python run.py                    # Run full system

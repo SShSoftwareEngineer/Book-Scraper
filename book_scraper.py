@@ -17,10 +17,10 @@ if platform.system() in ['Windows', 'win32']:
         # pylint: disable=deprecated-class
         asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())  # type: ignore[attr-defined]
 
+from celery.result import AsyncResult # pylint: disable=wrong-import-position, disable=import-error
 from parsers import book_urls_parser  # pylint: disable=wrong-import-position
 from tasks import parse_book, collect_and_save  # pylint: disable=wrong-import-position
-from celery.result import AsyncResult
-from celery_app import app
+from celery_app import app # pylint: disable=wrong-import-position
 
 
 def main():
