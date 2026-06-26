@@ -8,25 +8,25 @@ import asyncio
 import platform
 
 # CRITICAL: Set event loop policy BEFORE any Playwright imports
-if platform.system() in ['Windows','win32']:
+if platform.system() in ['Windows', 'win32']:
     # TODO: Windows async subprocess support - deprecated since Python 3.14; will be removed in Python 3.16.
     # Remove when Playwright supports Windows without ProactorEventLoopPolicy
     import warnings
 
-    with warnings.catch_warnings(): # type: ignore
+    with warnings.catch_warnings():  # type: ignore
         warnings.simplefilter("ignore", category=DeprecationWarning)
         # pylint: disable=deprecated-class
-        asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy()) # type: ignore[attr-defined]
+        asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())  # type: ignore[attr-defined]
 
-from celery import Celery # pylint: disable=wrong-import-position, disable=import-error
-import redis # pylint: disable=wrong-import-position, disable=import-error
-from config import redis_settings, scraper_settings # pylint: disable=wrong-import-position
+from celery import Celery  # pylint: disable=wrong-import-position, disable=import-error
+import redis  # pylint: disable=wrong-import-position, disable=import-error
+from config import redis_settings, scraper_settings  # pylint: disable=wrong-import-position
 
 # Initialize Celery app
 app = Celery('book_scraper')
 
 # Windows-specific configuration
-if platform.system() in ['Windows','win32']:
+if platform.system() in ['Windows', 'win32']:
     os.environ['FORKED_BY_MULTIPROCESSING'] = '1'
 
 # Main Celery configuration
@@ -56,7 +56,7 @@ app.conf.update(
     task_soft_time_limit=550,  # Warn task at 9:10 minutes
 
     # Worker pool - use 'threads' for Windows + async compatibility
-    worker_pool='threads' if platform.system() in ['Windows','win32'] else 'prefork',
+    worker_pool='threads' if platform.system() in ['Windows', 'win32'] else 'prefork',
     worker_max_tasks_per_child=100,
 
     # Periodic tasks schedule
@@ -75,6 +75,10 @@ cache = redis.Redis(
     db=redis_settings.cache_db,
     decode_responses=True  # type: ignore   # Auto decode bytes to strings
 )
+
+# redis_url = f"redis://{redis_settings.host}:{redis_settings.port}/{redis_settings.cache_db}?decode_responses=True"
+# cache = redis.Redis.from_url(redis_url)
+
 
 if __name__ == '__main__':
     pass

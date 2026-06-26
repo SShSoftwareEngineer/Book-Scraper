@@ -12,7 +12,7 @@ import signal
 from pathlib import Path
 
 from redis.exceptions import ConnectionError as RedisConnectionError  # pylint: disable=import-error
-from redis import Redis  # pylint: disable=import-error
+import redis  # pylint: disable=import-error
 from config import redis_settings, logging_settings, flower_settings, const
 
 # Create logs directory
@@ -38,17 +38,24 @@ def check_redis() -> bool | None:
     Check if Redis is running (in Docker or locally)
     Returns True if Redis is available, False otherwise
     """
+    # Запуск redis в Docker через терминал
+    # docker run -d --name redis-book-scraper -p 6379:6379 redis:8-alpine
     print('Checking Redis...')
     result = None
     try:
         # Подключаемся к Redis на localhost (порт проброшен из Docker)
-        client = Redis(
+        client = redis.Redis(
             host=redis_settings.host,
             port=redis_settings.port,
             socket_timeout=2,
             socket_connect_timeout=2,
             decode_responses=True,
         )
+
+        # url = (f'redis://{redis_settings.host}:{redis_settings.port}?'
+        #        f'socket_timeout=2&socket_connect_timeout=2&decode_responses=True')
+        # client = Redis.from_url(url)
+
         if client.ping():
             print('Redis is running and responding\n')
             result = True

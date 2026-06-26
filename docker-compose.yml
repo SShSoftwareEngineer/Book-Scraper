@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # Redis - message broker and cache
   redis:
@@ -107,31 +105,31 @@ services:
 
   # Main Scraper (runs once on demand)
   # Uncomment to run automatically on startup
-#  scraper:
-#    build: .
-#    container_name: book-scraper-main
-#    command: python book_scraper.py
-#    environment:
-#      - REDIS_HOST=redis
-#      - REDIS_PORT=6379
-#      - DB_HOST=postgres
-#      - DB_PORT=5432
-#      - DB_NAME=${DB_NAME}
-#      - DB_USER=${DB_USER}
-#      - DB_PASSWORD=${DB_PASSWORD}
-#    depends_on:
-#      redis:
-#        condition: service_healthy
-#      postgres:
-#        condition: service_healthy
-#      celery_worker:
-#        condition: service_started
-#      celery_beat:
-#        condition: service_started
-#    volumes:
-#      - ./logs:/app/logs
-#    networks:
-#      - book-scraper-network
+  scraper:
+    build: .
+    container_name: book-scraper-main
+    command: python book_scraper.py
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      celery_worker:
+        condition: service_started
+      celery_beat:
+        condition: service_started
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      - book-scraper-network
 
 volumes:
   redis_data:

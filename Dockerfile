@@ -1,6 +1,6 @@
 # Multi-stage Dockerfile for Book Scraper
 # Stage 1: Builder
-FROM python:3.14-slim as builder
+FROM python:3.14-slim AS builder
 
 WORKDIR /app
 
@@ -12,7 +12,10 @@ COPY pyproject.toml poetry.lock* ./
 
 # Create virtual environment and install dependencies
 RUN poetry config virtualenvs.in-project true && \
-    poetry install --no-interaction --no-ansi
+    poetry install --no-interaction --no-ansi --no-root
+
+# Force reinstall redis to ensure compatibility with the latest version
+RUN poetry run pip install --force-reinstall redis
 
 # Stage 2: Runtime
 FROM python:3.14-slim
