@@ -24,7 +24,7 @@ services:
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -38,8 +38,10 @@ services:
   # Celery Worker
   celery_worker:
     build: .
-    container_name: celery-worker-book-scraper
-    command: celery -A celery_app worker --loglevel=INFO --concurrency=3 --pool=threads
+#    Для запуска нескольких workers надо использовать команду `docker-compose up --scale celery_worker=3
+#    и закомментировать container_name, чтобы не было конфликта имен контейнеров.
+#    container_name: celery-worker-book-scraper
+    command: celery -A celery_app worker --loglevel=${LOG_LEVEL_WORKER} --concurrency=${WORKER_COUNT} --pool=threads
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
@@ -62,7 +64,7 @@ services:
   celery_beat:
     build: .
     container_name: celery-beat-book-scraper
-    command: celery -A celery_app beat --loglevel=INFO
+    command: celery -A celery_app beat --loglevel=${LOG_LEVEL_BEAT}
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
@@ -86,7 +88,7 @@ services:
   flower:
     build: .
     container_name: flower-book-scraper
-    command: celery -A celery_app flower --port=5555 --loglevel=INFO
+    command: celery -A celery_app flower --port=5555 --loglevel=${LOG_LEVEL_FLOWER}
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379

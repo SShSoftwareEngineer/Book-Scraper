@@ -85,6 +85,7 @@ class Selectors:
     """ Class for storing selectors used in the data parsing from environment variables """
     url_containers: str = '.image_container a'
     next_page: str = '.next a'
+    go_to_next_page='article.product_pod'
     title: str = 'h1'
     price: str = '.product_main .price_color'
     rating: str = '.product_main .star-rating'

@@ -28,7 +28,7 @@ async def get_browser_context():
 
     try:
         playwright = await async_playwright().start()
-        browser = await playwright.chromium.launch(headless=True)
+        browser = await playwright.chromium.launch(headless=True, args=['--disable-dev-shm-usage'])
         context = await browser.new_context()
     except Exception:
         if browser is not None:
@@ -244,7 +244,7 @@ def bulk_save_to_db(self, task_ids: list[str]) -> int:
 
 
 @app.task
-def collect_and_save()-> list[str]:
+def collect_and_save() -> list[str]:
     """
     Periodic task: collect parsed books from Redis and save to database in batches
 

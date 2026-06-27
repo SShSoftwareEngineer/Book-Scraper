@@ -76,9 +76,5 @@ cache = redis.Redis(
     decode_responses=True  # type: ignore   # Auto decode bytes to strings
 )
 
-# redis_url = f"redis://{redis_settings.host}:{redis_settings.port}/{redis_settings.cache_db}?decode_responses=True"
-# cache = redis.Redis.from_url(redis_url)
-
-
 if __name__ == '__main__':
     pass

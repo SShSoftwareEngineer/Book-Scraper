@@ -4,7 +4,6 @@ Optimized for Windows + async Playwright
 Uses environment variables from config.py
 """
 
-import socket
 import sys
 import time
 import subprocess
@@ -20,17 +19,6 @@ Path('logs').mkdir(exist_ok=True)
 
 # Track all started processes
 processes = []
-
-
-def port_is_open(host: str, port: int, timeout: int = 2) -> bool:
-    """ Check if port is open """
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.settimeout(timeout)
-    try:
-        result = sock.connect_ex((host, port))
-        return result == 0
-    finally:
-        sock.close()
 
 
 def check_redis() -> bool | None:
@@ -51,10 +39,6 @@ def check_redis() -> bool | None:
             socket_connect_timeout=2,
             decode_responses=True,
         )
-
-        # url = (f'redis://{redis_settings.host}:{redis_settings.port}?'
-        #        f'socket_timeout=2&socket_connect_timeout=2&decode_responses=True')
-        # client = Redis.from_url(url)
 
         if client.ping():
             print('Redis is running and responding\n')
