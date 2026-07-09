@@ -108,7 +108,9 @@ async def book_urls_parser_async() -> list[str]:
     book_urls = []
 
     async with async_playwright() as pw:
+
         browser = await pw.chromium.launch(headless=True, args=['--disable-dev-shm-usage'])
+
         page = await browser.new_page()
         await page.goto(const.base_url)
 
@@ -125,8 +127,9 @@ async def book_urls_parser_async() -> list[str]:
                 break
             # Go to next page
             await next_button.click()
+
             # await page.wait_for_load_state(state='networkidle')
-            await page.wait_for_load_state(state='domcontentloaded')
+            await page.wait_for_load_state(state='domcontentloaded', timeout=10000)
             await page.wait_for_selector(selectors.go_to_next_page)
 
             current_page += 1

@@ -5,7 +5,7 @@ Reads from .env file and environment variables
 """
 from dataclasses import dataclass
 from pydantic import Field
-from pydantic_settings import BaseSettings, SettingsConfigDict # type: ignore[import-not-found]
+from pydantic_settings import BaseSettings, SettingsConfigDict  # type: ignore[import-not-found]
 
 BASE_MODEL_CONFIG = {
     'env_file': '.env',
@@ -53,20 +53,12 @@ class RedisSettings(BaseSettings):
 
 
 # pylint: disable=too-few-public-methods
-class CelerySettings(BaseSettings):
-    """ Class for storing celery settings """
-    broker_url: str = Field(default='redis://localhost:6379/0', description='Celery broker URL')
-    result_backend: str = Field(default='redis://localhost:6379/1', description='Celery result backend URL')
-
-    model_config = SettingsConfigDict(**BASE_MODEL_CONFIG, env_prefix='CELERY_')
-
-
-# pylint: disable=too-few-public-methods
 class LoggingSettings(BaseSettings):
     """ Class for storing logging settings """
-    worker: str = Field(default='INFO', description='Log level (DEBUG, INFO, WARNING, ERROR)')
-    beat: str = Field(default='INFO', description='Log level (DEBUG, INFO, WARNING, ERROR)')
-    flower: str = Field(default='INFO', description='Log level (DEBUG, INFO, WARNING, ERROR)')
+    scraper: str = Field(default='INFO', description='Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)')
+    worker: str = Field(default='INFO', description='Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)')
+    beat: str = Field(default='INFO', description='Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)')
+    flower: str = Field(default='INFO', description='Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)')
 
     model_config = SettingsConfigDict(**BASE_MODEL_CONFIG, env_prefix='LOG_LEVEL_')
 
@@ -85,7 +77,7 @@ class Selectors:
     """ Class for storing selectors used in the data parsing from environment variables """
     url_containers: str = '.image_container a'
     next_page: str = '.next a'
-    go_to_next_page='article.product_pod'
+    go_to_next_page = 'article.product_pod'
     title: str = 'h1'
     price: str = '.product_main .price_color'
     rating: str = '.product_main .star-rating'
@@ -100,7 +92,6 @@ class Selectors:
 scraper_settings = ScraperSettings()
 db_settings = DatabaseSettings()
 redis_settings = RedisSettings()
-celery_settings = CelerySettings()
 logging_settings = LoggingSettings()
 flower_settings = FlowerSettings()
 selectors = Selectors()

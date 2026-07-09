@@ -1,4 +1,5 @@
 # Multi-stage Dockerfile for Book Scraper
+
 # Stage 1: Builder
 FROM python:3.14-slim AS builder
 
@@ -12,13 +13,15 @@ COPY pyproject.toml poetry.lock* ./
 
 # Create virtual environment and install dependencies
 RUN poetry config virtualenvs.in-project true && \
-    poetry install --no-interaction --no-ansi --no-root
+    poetry install --no-interaction --no-ansi --no-root && \
+    rm -rf /root/.cache/pip
 
 # Force reinstall redis to ensure compatibility with the latest version
 RUN poetry run pip install --force-reinstall redis
 
-# Stage 2: Runtime
-FROM python:3.14-slim
+# Stage 2: Base Runtime (for Beat and Flower)
+#FROM python:3.14-slim
+FROM python:3.14-slim AS runtime-base
 
 WORKDIR /app
 
@@ -36,16 +39,21 @@ ENV PATH="/app/.venv/bin:$PATH" \
 # Create logs directory
 RUN mkdir -p logs
 
-# Install Chromium and all system dependencies automatically
-RUN apt-get update && \
-    playwright install --with-deps chromium && \
-    rm -rf /var/lib/apt/lists/* \
-
 # Expose ports
 EXPOSE 5555
 
+# Stage 3: Heavy Runtime (only for Worker and Scraper)
+FROM runtime-base AS runtime-heavy
+
+# Install Chromium and all system dependencies automatically
+RUN apt-get update && \
+    playwright install-deps chromium && \
+    rm -rf /var/lib/apt/lists/* && \
+    playwright install chromium
+
 # Default command: run the launcher
 CMD ["python", "book_scraper.py"]
+
 
 # Available commands:
 # docker run ... python run.py                    # Run full system

@@ -6,6 +6,8 @@ Optimized for Windows + Redis + Celery
 import json
 import asyncio
 import threading
+from celery.utils.log import get_task_logger
+
 from celery import Task  # pylint: disable=import-error
 from playwright.async_api import async_playwright  # pylint: disable=import-error
 import psycopg2  # pylint: disable=import-error
@@ -16,6 +18,9 @@ from parsers import parse_book_page
 
 # Thread-local storage for Playwright instances (one per thread)
 _thread_local = threading.local()
+
+# Создаем логгер, который Celery считает "своим"
+logger = get_task_logger(__name__)
 
 
 async def get_browser_context():
@@ -28,7 +33,9 @@ async def get_browser_context():
 
     try:
         playwright = await async_playwright().start()
+
         browser = await playwright.chromium.launch(headless=True, args=['--disable-dev-shm-usage'])
+
         context = await browser.new_context()
     except Exception:
         if browser is not None:
@@ -144,6 +151,7 @@ def parse_book(self, url: str):
     Returns:
         str: Task ID (used as cache key)
     """
+
     try:
         worker_id = self.request.hostname.split('@')[0] if self.request.hostname else 'unknown'
 
