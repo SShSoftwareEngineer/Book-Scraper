@@ -1,56 +1,137 @@
 """
-The main module contains a script for parsing book information from a website and writing it to a database using
-multiprocessing. It orchestrates the entire workflow, including URL extraction, task management, and database writing.
+The main module contains a script for parsing book information from a website with Celery + Redis and writing it
+to a database. It orchestrates the entire workflow, including URL extraction, task management, and database writing.
 """
 
-from multiprocessing import Process, JoinableQueue
-from config import db_settings, const
-from parsers import book_urls_parser
-from process_handler import ProcessManager
-from process_handler import db_writer_process
+import argparse
+import asyncio
+import logging
+import platform
+from pathlib import Path
+
+# CRITICAL: Set event loop policy BEFORE any async code
+if platform.system() in ['Windows', 'win32']:
+    # TODO: Windows async subprocess support - deprecated since Python 3.14; will be removed in Python 3.16.
+    # Remove when Playwright supports Windows without ProactorEventLoopPolicy
+    import warnings
+
+    with warnings.catch_warnings():  # type: ignore
+        warnings.simplefilter("ignore", category=DeprecationWarning)
+        # pylint: disable=deprecated-class
+        asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())  # type: ignore[attr-defined]
+
+from celery.result import AsyncResult  # pylint: disable=wrong-import-position, disable=import-error
+from config import logging_settings  # pylint: disable=wrong-import-position
+from parsers import book_urls_parser  # pylint: disable=wrong-import-position
+from tasks import parse_book, collect_and_save  # pylint: disable=wrong-import-position
+from celery_app import app  # pylint: disable=wrong-import-position
+
+logger = logging.getLogger(__name__)
+
+
+def parse_args() -> argparse.Namespace:
+    """Parse command line arguments for scraper logging."""
+    parser = argparse.ArgumentParser(description='Run book scraper and wait for Celery tasks.')
+    parser.add_argument(
+        '--loglevel',
+        default=logging_settings.scraper,
+        choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
+        help='Logging level for the scraper process.',
+    )
+    parser.add_argument(
+        '--logfile',
+        default=None,
+        help='Optional file path for scraper logs.',
+    )
+    return parser.parse_args()
+
+
+def configure_logging(loglevel: str, logfile: str | None = None) -> None:
+    """Configure console and optional file logging for this process."""
+    handlers: list[logging.Handler] = [logging.StreamHandler()]
+
+    if logfile:
+        log_path = Path(logfile)
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        handlers.append(logging.FileHandler(log_path, encoding='utf-8'))
+
+    logging.basicConfig(
+        level=getattr(logging, loglevel.upper(), logging.INFO),
+        format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
+        handlers=handlers,
+        force=True,
+    )
 
 
 def main():
-    """ Main functional execution """
+    """Main execution flow"""
+    args = parse_args()
+    configure_logging(args.loglevel, args.logfile)
 
-    # Creating multiprocessing queues
-    task_queue = JoinableQueue(maxsize=const.task_queue_maxsize)
-    result_queue = JoinableQueue(maxsize=const.result_queue_maxsize)
+    # Extract all book URLs (uses async internally)
+    logger.info('Extracting book URLs...')
 
-    # Extract all book URLs
-    print('Extracting book URLs...')
-    book_urls = book_urls_parser()
-    print(f'{len(book_urls)} book URLs extracted')
+    try:
+        book_urls: list[str] = book_urls_parser()  # type: ignore[annotation-unchecked]
+        logger.info('%s book URLs extracted', len(book_urls))
+    except (asyncio.TimeoutError, asyncio.CancelledError) as err:
+        logger.error('Failed to extract URLs: %s', err)
+        return
+    except Exception as err:  # pylint: disable=broad-exception-caught
+        logger.exception('Failed to extract URLs: %s', err)
+        return
 
-    # Fill task queue
-    for url in book_urls:
-        task_queue.put(url)
+    if not book_urls:
+        logger.warning('No URLs found. Exiting.')
+        return
 
-    # Start DB writer
-    db_process = Process(
-        target=db_writer_process,
-        args=(result_queue, db_settings)
-    )
-    db_process.start()
+    # Send parsing tasks to Celery workers
+    logger.info('Sending %s parsing tasks to Celery workers...', len(book_urls))
+    tasks = []
+    for i, url in enumerate(book_urls, 1):
+        # task = parse_book(url)
+        task = parse_book.delay(url)
+        tasks.append(task)
+        if i % 10 == 0:
+            logger.info('Submitted %s/%s tasks', i, len(book_urls))
 
-    # Start Process Manager with workers
-    manager = ProcessManager(const.process_count, task_queue, result_queue)
-    manager.start()
+    logger.info('All %s parsing tasks submitted to queue', len(tasks))
 
-    # Monitor workers
-    manager.monitor()
+    # Wait for all parsing tasks to complete
+    logger.info('Waiting for all %s parsing tasks to complete...', len(book_urls))
 
-    # Wait for task queue to empty
-    task_queue.join()
-    print('All scraping tasks completed')
+    completed = 0
+    failed = 0
 
-    # Stop workers
-    manager.stop()
+    for i, task in enumerate(tasks, 1):
+        try:
+            task.get(timeout=30)
+            completed += 1
 
-    # Wait for results to be written
-    result_queue.put(None)  # Stop signal for DB writer
-    db_process.join()
-    print('All database wright tasks completed')
+            if i % 10 == 0 or i == len(tasks):
+                logger.info('Progress: %s/%s tasks processed (%s successful)', i, len(tasks), completed)
+
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            failed += 1
+            # traceback.print_exc()  # полный стек ошибки
+            logger.error('Task %s failed: %s', i, str(exc)[:100])
+
+    logger.info('Parsing phase complete: %s successful, %s failed', completed, failed)
+
+    # Final flush - save any remaining books in cache
+    logger.info('Flushing remaining books to database...')
+    try:
+        flush_task = collect_and_save.delay()
+        batch_task_ids = flush_task.get(timeout=60)
+
+        for task_id in batch_task_ids:
+            AsyncResult(task_id, app=app).get(timeout=60)
+
+        logger.info('Database write completed')
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        logger.exception('Database write failed or timed out: %s', exc)
+
+    logger.info('Monitoring tasks via Flower: http://localhost:5555')
 
 
 if __name__ == '__main__':

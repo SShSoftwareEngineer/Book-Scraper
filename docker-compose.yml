@@ -1,0 +1,192 @@
+# Python 3.14 + Celery + Redis + Flower + PostgreSQL
+
+services:
+  # Redis - message broker and cache
+  redis:
+    image: redis:8-alpine
+    container_name: redis-book-scraper
+    ports:
+      - "${REDIS_PORT}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - book-scraper-network
+
+  # PostgreSQL - main database
+  postgres:
+    image: postgres:17-alpine
+    container_name: postgres-book-scraper
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${DB_USER}" ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - book-scraper-network
+
+  # Celery Worker
+  celery_worker:
+    build:
+      context: .
+      target: runtime-heavy  # Нужен Хром (будет весить 2 ГБ)
+    #    Для запуска нескольких workers надо использовать команду `docker-compose up --scale celery_worker=3
+    #    и закомментировать container_name, чтобы не было конфликта имен контейнеров.
+    #    container_name: celery-worker-book-scraper
+    command: celery -A celery_app worker --loglevel=${LOG_LEVEL_WORKER} --concurrency=${WORKER_COUNT} --pool=threads --logfile=/app/logs/worker.log
+    env_file:
+      - .env
+    environment:
+      - LOG_LEVEL_WORKER
+      #         redis settings
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_BROKER_DB
+      - REDIS_BACKEND_DB
+      - REDIS_CACHE_DB
+      #         postgres settings
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME
+      - DB_USER
+      - DB_PASSWORD
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./logs:/app/logs
+      - .:/app
+      - /app/.venv
+    networks:
+      - book-scraper-network
+    restart: unless-stopped
+
+  # Celery Beat - periodic tasks
+  celery_beat:
+    build:
+      context: .
+      target: runtime-base   # Хром НЕ нужен (будет весить ~250 МБ!)
+    container_name: celery-beat-book-scraper
+    command: celery -A celery_app beat --loglevel=${LOG_LEVEL_BEAT} --logfile=/app/logs/beat.log
+    env_file:
+      - .env
+    environment:
+      - LOG_LEVEL_BEAT
+      #         redis settings
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_BROKER_DB
+      - REDIS_BACKEND_DB
+      - REDIS_CACHE_DB
+      #         postgres settings
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME
+      - DB_USER
+      - DB_PASSWORD
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./logs:/app/logs
+      - .:/app
+      - /app/.venv
+    networks:
+      - book-scraper-network
+    restart: unless-stopped
+
+  # Flower - monitoring UI
+  flower:
+    build:
+      context: .
+      target: runtime-base   # Хром НЕ нужен (будет весить ~250 МБ!)
+    container_name: flower-book-scraper
+    command: celery -A celery_app flower --port=5555 --loglevel=${LOG_LEVEL_FLOWER}
+    env_file:
+      - .env
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_BROKER_DB
+      - REDIS_BACKEND_DB
+      - REDIS_CACHE_DB
+      - LOG_LEVEL_FLOWER
+    depends_on:
+      redis:
+        condition: service_healthy
+      celery_worker:
+        condition: service_started
+    ports:
+      - "${FLOWER_PORT}:5555"
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      - book-scraper-network
+    restart: unless-stopped
+
+  # Main Scraper (runs once on demand)
+  # Uncomment to run automatically on startup
+  scraper:
+    build:
+      context: .
+      target: runtime-heavy  # Нужен Хром (будет весить 2 ГБ)
+    container_name: book-scraper-main
+    command: python book_scraper.py --loglevel=${LOG_LEVEL_SCRAPER} --logfile=/app/logs/scraper.log
+    env_file:
+      - .env
+    environment:
+      #         redis settings
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_BROKER_DB
+      - REDIS_BACKEND_DB
+      - REDIS_CACHE_DB
+      #         postgres settings
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME
+      - DB_USER
+      - DB_PASSWORD
+      #         main settings
+      - BASE_URL
+      - SCRAPER_DELAY
+      - MAX_RETRIES
+      - MAX_PAGE_PER_CATEGORY
+      - BATCH_SIZE
+      - COLLECT_INTERVAL
+      - LOG_LEVEL_SCRAPER
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./logs:/app/logs
+      - .:/app
+      - /app/.venv
+    networks:
+      - book-scraper-network
+
+volumes:
+  redis_data:
+  postgres_data:
+
+networks:
+  book-scraper-network:
+    driver: bridge

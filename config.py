@@ -1,41 +1,83 @@
 """
-The module contains setting classes and constants for a web scraping or data parsing project.
+The module contains setting classes and constants for a web scraping or data parsing
+Application configuration using Pydantic v2 BaseSettings
+Reads from .env file and environment variables
 """
-
-import os
 from dataclasses import dataclass
-from dotenv import load_dotenv
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict  # type: ignore[import-not-found]
 
-# Loading settings from .env
-load_dotenv()
+BASE_MODEL_CONFIG = {
+    'env_file': '.env',
+    'env_file_encoding': 'utf-8',
+    'extra': 'ignore'
+}
 
 
-@dataclass(frozen=True)
-class ProjConst:
+# pylint: disable=too-few-public-methods
+class ScraperSettings(BaseSettings):
     """ Class for storing project system settings from environment variables """
-    base_url: str = os.getenv('BASE_URL', '')
-    process_count: int = int(os.getenv('PROCESS_COUNT', '3'))
-    task_queue_maxsize: int = int(os.getenv('TASK_QUEUE_MAXSIZE', '300'))
-    result_queue_maxsize: int = int(os.getenv('RESULT_QUEUE_MAXSIZE', '300'))
-    max_page_per_category: int = int(os.getenv('MAX_PAGE_PER_CATEGORY', '1'))
+    base_url: str = Field(default='', description='Base URL for scraping')
+    max_pages: int = Field(default=1, validation_alias='MAX_PAGE_PER_CATEGORY',
+                           description='Maximum pages to scrape per category')
+    batch_size: int = Field(default=50, description='Batch size for database writes')
+    collect_interval: float = Field(default=60.0, description='Interval in seconds between automatic database writes')
+    max_retries: int = Field(default=3, description='Maximum task retries')
+    worker_count: int = Field(default=3, description='Worker count')
+
+    model_config = SettingsConfigDict(**BASE_MODEL_CONFIG)
 
 
-@dataclass(frozen=True)
-class DBSettings:
+# pylint: disable=too-few-public-methods
+class DatabaseSettings(BaseSettings):
     """ Class for storing database settings from environment variables """
-    name: str = os.getenv('DB_NAME', '')
-    host: str = os.getenv('HOST', '')
-    port: int = int(os.getenv('PORT', '5432'))
-    user: str = os.getenv('USER', '')
-    password: str = os.getenv('PASSWORD', '')
-    # batch_size: int = int(os.getenv('BATCH_SIZE', '100'))
+    name: str = Field(default='', description='Database name')
+    host: str = Field(default='localhost', description='Database host')
+    port: int = Field(default=5432, description='Database port')
+    user: str = Field(default='', description='Database user')
+    password: str = Field(default='', description='Database password')
+
+    model_config = SettingsConfigDict(**BASE_MODEL_CONFIG, env_prefix='DB_')
 
 
+# pylint: disable=too-few-public-methods
+class RedisSettings(BaseSettings):
+    """ Class for storing Redis settings """
+    host: str = Field(default='localhost', description='Redis host')
+    port: int = Field(default=6379, description='Redis port')
+    broker_db: int = Field(default=0, description='Redis DB for task broker')
+    backend_db: int = Field(default=1, description='Redis DB for task results')
+    cache_db: int = Field(default=2, description='Redis DB for parsed books cache')
+
+    model_config = SettingsConfigDict(**BASE_MODEL_CONFIG, env_prefix='REDIS_')
+
+
+# pylint: disable=too-few-public-methods
+class LoggingSettings(BaseSettings):
+    """ Class for storing logging settings """
+    scraper: str = Field(default='INFO', description='Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)')
+    worker: str = Field(default='INFO', description='Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)')
+    beat: str = Field(default='INFO', description='Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)')
+    flower: str = Field(default='INFO', description='Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)')
+
+    model_config = SettingsConfigDict(**BASE_MODEL_CONFIG, env_prefix='LOG_LEVEL_')
+
+
+# pylint: disable=too-few-public-methods
+class FlowerSettings(BaseSettings):
+    """ Class for storing flower settings """
+    port: int = Field(default=5555, validation_alias='FLOWER_PORT', description='Flower web UI port')
+
+    model_config = SettingsConfigDict(**BASE_MODEL_CONFIG)
+
+
+# pylint: disable=too-many-instance-attributes
 @dataclass(frozen=True)
 class Selectors:
     """ Class for storing selectors used in the data parsing from environment variables """
     url_containers: str = '.image_container a'
     next_page: str = '.next a'
+    go_to_next_page = 'article.product_pod'
     title: str = 'h1'
     price: str = '.product_main .price_color'
     rating: str = '.product_main .star-rating'
@@ -45,13 +87,17 @@ class Selectors:
     info_rows: str = 'table.table-striped tr'
     category: str = '.breadcrumb li'
 
-    category_title: str = 'strong'
-
 
 # Create instances of settings for use in the project
-const = ProjConst()
-db_settings = DBSettings()
+scraper_settings = ScraperSettings()
+db_settings = DatabaseSettings()
+redis_settings = RedisSettings()
+logging_settings = LoggingSettings()
+flower_settings = FlowerSettings()
 selectors = Selectors()
+
+# Alias for backward compatibility
+const = scraper_settings
 
 if __name__ == '__main__':
     pass

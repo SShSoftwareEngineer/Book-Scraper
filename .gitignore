@@ -156,7 +156,6 @@ cython_debug/
 .idea/
 
 
-
 # PyCharm
 #  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
 #  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
@@ -165,5 +164,14 @@ cython_debug/
 #.idea/
 
 
+# Celery Beat schedule files
+celerybeat-schedule*
+celerybeat-schedule-shm
+celerybeat-schedule-wal
+
+
 /Notes/
 /.env
+.env
+.env.docker
+logs/
