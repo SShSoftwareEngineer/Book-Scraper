@@ -138,7 +138,7 @@ http://localhost:5555
 ### PostgreSQL
 ```bash
 # Connect to database
-docker exec postgres-book-scraper psql -U postgres -d books_scraper
+docker exec postgres-book-scraper psql -U postgres -d book_scraper
 
 # Count saved books
 SELECT COUNT(*) FROM books;
