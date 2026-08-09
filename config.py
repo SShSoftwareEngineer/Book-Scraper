@@ -21,9 +21,11 @@ class ScraperSettings(BaseSettings):
     max_pages: int = Field(default=1, validation_alias='MAX_PAGE_PER_CATEGORY',
                            description='Maximum pages to scrape per category')
     batch_size: int = Field(default=50, description='Batch size for database writes')
-    collect_interval: float = Field(default=60.0, description='Interval in seconds between automatic database writes')
+    collect_interval: float = Field(default=60.0, description='Interval between automatic database writes, sec.')
     max_retries: int = Field(default=3, description='Maximum task retries')
     worker_count: int = Field(default=3, description='Worker count')
+    services_stop_timeout: float = Field(default=120.0, description='Timeout until services are stopped after tasks are completed, sec.')
+    task_check_timeout: float = Field(default=10.0, description='Task completion check timeout, sec.')
 
     model_config = SettingsConfigDict(**BASE_MODEL_CONFIG)
 

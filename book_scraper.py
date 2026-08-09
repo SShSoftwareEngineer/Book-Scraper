@@ -7,7 +7,14 @@ import argparse
 import asyncio
 import logging
 import platform
+import subprocess
+import sys
+import time
 from pathlib import Path
+from config import const
+
+from celery import current_app
+from celery.exceptions import TimeLimitExceeded, SoftTimeLimitExceeded
 
 # CRITICAL: Set event loop policy BEFORE any async code
 if platform.system() in ['Windows', 'win32']:
@@ -63,6 +70,24 @@ def configure_logging(loglevel: str, logfile: str | None = None) -> None:
     )
 
 
+def wait_for_queue_empty(timeout=120, check_interval=10):
+    """ Wait until task queue is empty """
+    start_time = time.time()
+
+    while time.time() - start_time < timeout:
+        # Проверь количество задач в очереди
+        inspect = current_app.control.inspect()
+        active = inspect.active()
+
+        if not active or all(not tasks for tasks in active.values()):
+            return True
+
+        time.sleep(check_interval)
+
+    print(f'Timeout after {timeout}s')
+    return False
+
+
 def main():
     """Main execution flow"""
     args = parse_args()
@@ -113,7 +138,7 @@ def main():
 
         except Exception as exc:  # pylint: disable=broad-exception-caught
             failed += 1
-            # traceback.print_exc()  # полный стек ошибки
+            # traceback.print_exc() # полный стек ошибки
             logger.error('Task %s failed: %s', i, str(exc)[:100])
 
     logger.info('Parsing phase complete: %s successful, %s failed', completed, failed)
@@ -132,6 +157,26 @@ def main():
         logger.exception('Database write failed or timed out: %s', exc)
 
     logger.info('Monitoring tasks via Flower: http://localhost:5555')
+
+    print('Flushing remaining books to database...')
+    flush_task = collect_and_save.delay()
+
+    # Дождись завершения flush_task (не полагаясь на beat)
+    try:
+        flush_task.get(timeout=const.services_stop_timeout)
+        print('Final flush completed')
+    except (TimeLimitExceeded, SoftTimeLimitExceeded) as e:
+        print(f'⚠️ Task timeout: {e}')
+
+    # Ждем завершения всех задач
+    if wait_for_queue_empty(timeout=const.services_stop_timeout, check_interval=const.task_check_timeout):
+        if Path('/.dockerenv').exists():
+            print('\n' + '=' * 70)
+            print('✅ SCRAPING DEMONSTRATION COMPLETE')
+            print('=' * 70)
+            print('\nTo stop all services, run from your host:')
+            print('  docker-compose down')
+        logger.info('All tasks completed.')
 
 
 if __name__ == '__main__':

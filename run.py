@@ -20,6 +20,10 @@ Path('logs').mkdir(exist_ok=True)
 # Track all started processes
 processes = []
 
+# Получаем гарантированный путь к python.exe внутри нашей .venv
+PYTHON_EXE_PATH = str(Path(sys.prefix) / "Scripts" / "python.exe") if sys.platform in ['Windows',
+                                                                                       'win32'] else sys.executable
+
 
 def check_redis() -> bool | None:
     """
@@ -62,7 +66,8 @@ def start_celery_worker(concurrency: int = 4) -> subprocess.Popen | None:
     print(f'Starting Celery Worker (concurrency={concurrency}, loglevel={loglevel})...')
 
     cmd = [
-        'celery', '-A', 'celery_app', 'worker',
+        PYTHON_EXE_PATH, '-m', 'celery',
+        '-A', 'celery_app', 'worker',
         f'--loglevel={loglevel}',
         f'--concurrency={concurrency}',
         '--pool=threads',  # Explicitly use threads for Windows compatibility
@@ -99,7 +104,8 @@ def start_celery_beat() -> subprocess.Popen | None:
     print(f'Starting Celery Beat (loglevel={loglevel})...')
 
     cmd = [
-        'celery', '-A', 'celery_app', 'beat',
+        PYTHON_EXE_PATH, '-m', 'celery',
+        '-A', 'celery_app', 'beat',
         f'--loglevel={loglevel}',
         '--logfile=logs/beat.log',
         '--scheduler=celery.beat:PersistentScheduler',  # Persistent scheduler
@@ -134,7 +140,8 @@ def start_flower() -> subprocess.Popen | None:
     print(f'Starting Flower (http://localhost:{port}, loglevel={loglevel})...')
 
     cmd = [
-        'celery', '-A', 'celery_app', 'flower',
+        PYTHON_EXE_PATH, '-m', 'celery',
+        '-A', 'celery_app', 'flower',
         f'--port={port}',
         f'--loglevel={loglevel}',
     ]
@@ -169,7 +176,7 @@ def run_scraper() -> int:
 
     try:
         result = subprocess.run(
-            [sys.executable, 'book_scraper.py'],
+            [PYTHON_EXE_PATH, 'book_scraper.py'],
             check=False
         )
         return result.returncode
@@ -239,6 +246,11 @@ def cleanup(_signum=None, _frame=None) -> None:
                 print(f'Error stopping process {i + 1}: {err}')
 
     print('\nAll services stopped')
+    print('\nStopping all Docker containers...\n')
+    # Останавливаем контейнеры в Docker
+    subprocess.run(['docker-compose', 'stop'])
+    # subprocess.run(['docker-compose', 'down'])
+    print('\nAll Docker containers stopped')
     print('=' * 70)
     sys.exit(0)
 
@@ -289,34 +301,18 @@ def main():
         # Step 4: Run scraper
         exit_code = run_scraper()
 
-        # Step 5: Wait for background tasks
+        # Step 5: Stopping all services
         print('\n' + '=' * 70)
-        print('WAITING FOR BACKGROUND TASKS')
+        print(f'✅ SCRAPER COMPLETED {exit_code=}')
         print('=' * 70)
-        print('Allowing time for database writes to complete...')
-        print('(This may take a few seconds)\n')
 
-        for remaining in range(15, 0, -1):
-            print(f'{remaining}s remaining...', end='\r')
-            time.sleep(1)
+        # Останови сервисы автоматически
+        print('\nStopping all services...')
+        cleanup()
 
-        print('\nDone!\n')
 
-        print('=' * 70)
-        print('SCRAPING COMPLETED')
-        print('=' * 70)
-        print(f'Exit code: {exit_code}')
-        print('\nServices still running:')
-        print(f'   - Worker:  http://localhost:{flower_settings.port} (Flower UI)')
-        print('   - Beat:    Running periodic tasks')
-        print('   - Redis:   Running in Docker')
-        print('\nPress Ctrl+C to stop all services\n')
-        print('=' * 70 + '\n')
-
-        # Keep services running until user interrupts
-        while True:
-            time.sleep(1)
     except KeyboardInterrupt:
+        print('\n⏸️ Interrupted by user')
         cleanup()
     except Exception as err:  # pylint: disable=broad-exception-caught
         print(f'\nFatal error: {err}')

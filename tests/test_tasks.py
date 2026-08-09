@@ -2,6 +2,7 @@ import json
 from types import SimpleNamespace
 
 import tasks
+from config import const, db_settings, redis_settings, logging_settings, flower_settings, selectors
 
 
 def make_book(title='Book', url='https://example.test/book'):
