@@ -24,7 +24,7 @@ class ScraperSettings(BaseSettings):
     collect_interval: float = Field(default=60.0, description='Interval between automatic database writes, sec.')
     max_retries: int = Field(default=3, description='Maximum task retries')
     worker_count: int = Field(default=3, description='Worker count')
-    services_stop_timeout: float = Field(default=120.0, description='Timeout until services are stopped after tasks are completed, sec.')
+    services_stop_timeout: float = Field(default=120.0, description='Timeout until services are stopped, sec.')
     task_check_timeout: float = Field(default=10.0, description='Task completion check timeout, sec.')
 
     model_config = SettingsConfigDict(**BASE_MODEL_CONFIG)

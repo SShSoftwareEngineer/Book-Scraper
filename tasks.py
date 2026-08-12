@@ -92,17 +92,42 @@ class DatabaseTask(Task):
             self._db_cursor.execute("""
                                     CREATE TABLE IF NOT EXISTS books
                                     (
-                                        id           SERIAL PRIMARY KEY,
-                                        title        VARCHAR(255),
-                                        category     VARCHAR(255),
-                                        price        VARCHAR(255),
-                                        rating       VARCHAR(255),
-                                        available    VARCHAR(255),
-                                        image_url    VARCHAR(255),
-                                        description  TEXT,
+                                        id
+                                        SERIAL
+                                        PRIMARY
+                                        KEY,
+                                        title
+                                        VARCHAR
+                                    (
+                                        255
+                                    ),
+                                        category VARCHAR
+                                    (
+                                        255
+                                    ),
+                                        price VARCHAR
+                                    (
+                                        255
+                                    ),
+                                        rating VARCHAR
+                                    (
+                                        255
+                                    ),
+                                        available VARCHAR
+                                    (
+                                        255
+                                    ),
+                                        image_url VARCHAR
+                                    (
+                                        255
+                                    ),
+                                        description TEXT,
                                         product_info JSONB,
-                                        url          VARCHAR(255) UNIQUE
-                                    )
+                                        url VARCHAR
+                                    (
+                                        255
+                                    ) UNIQUE
+                                        )
                                     """)
             self.db_connection.commit()
         return self._db_cursor
@@ -119,24 +144,28 @@ async def scrape_book_with_browser(url: str, worker_id: str) -> dict | None:
     Returns:
         dict: Parsed book data or None if failed
     """
+    result = None
     page = None
     try:
         context = await get_browser_context()
-        page = await context.new_page()
+        if context:
+            page = await context.new_page()
 
-        # Parse book using your async parser
-        book = await parse_book_page(page, url, worker_id)
-        return book
+            # Parse book using your async parser
+            book = await parse_book_page(page, url, worker_id)
+            result = book
 
     except asyncio.TimeoutError:
         print(f'Worker {worker_id} Timeout parsing: {url}')
-        return None
+        result = None
     except Exception as err:  # pylint: disable=broad-exception-caught
         print(f'Worker {worker_id} Error parsing {url}: {err}')
-        return None
+        result = None
     finally:
         if page:
             await page.close()
+
+    return result
 
 
 @app.task(bind=True, max_retries=const.max_retries, default_retry_delay=5)
@@ -232,8 +261,7 @@ def bulk_save_to_db(self, task_ids: list[str]) -> int:
         execute_batch(self.db_cursor, """
                                       INSERT INTO books (title, category, price, rating, available,
                                                          image_url, description, product_info, url)
-                                      VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-                                      ON CONFLICT (url) DO NOTHING
+                                      VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT (url) DO NOTHING
                                       """, batch_buffer)
 
         self.db_connection.commit()

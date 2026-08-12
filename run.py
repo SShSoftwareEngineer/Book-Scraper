@@ -248,7 +248,7 @@ def cleanup(_signum=None, _frame=None) -> None:
     print('\nAll services stopped')
     print('\nStopping all Docker containers...\n')
     # Останавливаем контейнеры в Docker
-    subprocess.run(['docker-compose', 'stop'])
+    subprocess.run(['docker', 'compose', 'stop'], check=False)
     # subprocess.run(['docker-compose', 'down'])
     print('\nAll Docker containers stopped')
     print('=' * 70)

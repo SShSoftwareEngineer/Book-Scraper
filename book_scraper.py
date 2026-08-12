@@ -7,12 +7,8 @@ import argparse
 import asyncio
 import logging
 import platform
-import subprocess
-import sys
 import time
 from pathlib import Path
-from config import const
-
 from celery import current_app
 from celery.exceptions import TimeLimitExceeded, SoftTimeLimitExceeded
 
@@ -27,8 +23,8 @@ if platform.system() in ['Windows', 'win32']:
         # pylint: disable=deprecated-class
         asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())  # type: ignore[attr-defined]
 
-from celery.result import AsyncResult  # pylint: disable=wrong-import-position, disable=import-error
-from config import logging_settings  # pylint: disable=wrong-import-position
+from celery.result import AsyncResult  # pylint: disable=wrong-import-position, import-error, wrong-import-order, ungrouped-imports
+from config import logging_settings, const  # pylint: disable=wrong-import-position
 from parsers import book_urls_parser  # pylint: disable=wrong-import-position
 from tasks import parse_book, collect_and_save  # pylint: disable=wrong-import-position
 from celery_app import app  # pylint: disable=wrong-import-position
@@ -88,6 +84,7 @@ def wait_for_queue_empty(timeout=120, check_interval=10):
     return False
 
 
+# pylint: disable=too-many-branches,too-many-statements
 def main():
     """Main execution flow"""
     args = parse_args()
