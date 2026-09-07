@@ -2,6 +2,8 @@
 
 Professional-grade data extraction system demonstrating ETL principles, async processing, and distributed task queue architecture using Celery + Redis.
 
+[![BookScraper CI/CD Pipeline](https://github.com/SShSoftwareEngineer/BookScraper/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/SShSoftwareEngineer/BookScraper/actions)
+
 ## 🏗️ Architecture
 
 ```

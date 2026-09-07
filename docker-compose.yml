@@ -1,5 +1,43 @@
 # Python 3.14 + Celery + Redis + Flower + PostgreSQL
 
+# Common security settings for services
+x-common-security: &common-security
+  read_only: true
+  tmpfs:
+    - /tmp
+    - /var/run
+  cap_drop:
+    - ALL
+  cap_add:
+    - NET_BIND_SERVICE
+  security_opt:
+    - no-new-privileges:true
+  deploy:
+    resources:
+      limits:
+        cpus: '1'
+        memory: 2G
+
+# Environment variables for Redis
+x-redis-env: &redis-env
+  REDIS_HOST: redis
+  REDIS_PORT: 6379
+  REDIS_BROKER_DB: ${REDIS_BROKER_DB}
+  REDIS_BACKEND_DB: ${REDIS_BACKEND_DB}
+  REDIS_CACHE_DB: ${REDIS_CACHE_DB}
+
+# Environment variables for PostgreSQL
+x-db-env: &db-env
+  DB_HOST: postgres
+  DB_PORT: 5432
+  DB_NAME: ${DB_NAME}
+  DB_USER: ${DB_USER}
+  DB_PASSWORD: ${DB_PASSWORD}
+
+# Combined environment variables for Redis and PostgreSQL
+x-redis-db-env: &redis-db-env
+  <<: [ *redis-env, *db-env ]
+
 services:
   # Redis - message broker and cache
   redis:
@@ -39,6 +77,7 @@ services:
 
   # Celery Worker
   celery_worker:
+    <<: *common-security
     build:
       context: .
       target: runtime-heavy  # Нужен Хром (будет весить 2 ГБ)
@@ -49,19 +88,8 @@ services:
     env_file:
       - .env
     environment:
-      - LOG_LEVEL_WORKER
-      #         redis settings
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - REDIS_BROKER_DB
-      - REDIS_BACKEND_DB
-      - REDIS_CACHE_DB
-      #         postgres settings
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_NAME
-      - DB_USER
-      - DB_PASSWORD
+      <<: *redis-db-env
+      LOG_LEVEL_WORKER: ${LOG_LEVEL_WORKER}
     depends_on:
       redis:
         condition: service_healthy
@@ -77,6 +105,7 @@ services:
 
   # Celery Beat - periodic tasks
   celery_beat:
+    <<: *common-security
     build:
       context: .
       target: runtime-base   # Хром НЕ нужен (будет весить ~250 МБ!)
@@ -85,19 +114,8 @@ services:
     env_file:
       - .env
     environment:
-      - LOG_LEVEL_BEAT
-      #         redis settings
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - REDIS_BROKER_DB
-      - REDIS_BACKEND_DB
-      - REDIS_CACHE_DB
-      #         postgres settings
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_NAME
-      - DB_USER
-      - DB_PASSWORD
+      <<: *redis-db-env
+      LOG_LEVEL_BEAT: ${LOG_LEVEL_BEAT}
     depends_on:
       redis:
         condition: service_healthy
@@ -113,6 +131,7 @@ services:
 
   # Flower - monitoring UI
   flower:
+    <<: *common-security
     build:
       context: .
       target: runtime-base   # Хром НЕ нужен (будет весить ~250 МБ!)
@@ -121,12 +140,8 @@ services:
     env_file:
       - .env
     environment:
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - REDIS_BROKER_DB
-      - REDIS_BACKEND_DB
-      - REDIS_CACHE_DB
-      - LOG_LEVEL_FLOWER
+      <<: *redis-env
+      LOG_LEVEL_FLOWER: ${LOG_LEVEL_FLOWER}
     depends_on:
       redis:
         condition: service_healthy
@@ -151,26 +166,15 @@ services:
     env_file:
       - .env
     environment:
-      #         redis settings
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - REDIS_BROKER_DB
-      - REDIS_BACKEND_DB
-      - REDIS_CACHE_DB
-      #         postgres settings
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_NAME
-      - DB_USER
-      - DB_PASSWORD
+      <<: *redis-db-env
       #         main settings
-      - BASE_URL
-      - SCRAPER_DELAY
-      - MAX_RETRIES
-      - MAX_PAGE_PER_CATEGORY
-      - BATCH_SIZE
-      - COLLECT_INTERVAL
-      - LOG_LEVEL_SCRAPER
+      BASE_URL: ${BASE_URL}
+      #      SCRAPER_DELAY: ${SCRAPER_DELAY}
+      MAX_RETRIES: ${MAX_RETRIES}
+      MAX_PAGE_PER_CATEGORY: ${MAX_PAGE_PER_CATEGORY}
+      BATCH_SIZE: ${BATCH_SIZE}
+      COLLECT_INTERVAL: ${COLLECT_INTERVAL}
+      LOG_LEVEL_SCRAPER: ${LOG_LEVEL_SCRAPER}
     depends_on:
       redis:
         condition: service_healthy

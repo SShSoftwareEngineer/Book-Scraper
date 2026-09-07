@@ -51,6 +51,17 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/* && \
     playwright install chromium
 
+# Creating a non-root user
+RUN groupadd -r appuser && useradd -r -g appuser appuser
+
+# Changing Permissions
+WORKDIR /app
+RUN chown -R appuser:appuser /app
+USER appuser  # run as appuser, not root
+
+# Make / read-only where possible
+RUN mkdir -p /tmp /app/logs && chmod 777 /tmp /app/logs
+
 # Default command: run the launcher
 CMD ["python", "book_scraper.py"]
 
