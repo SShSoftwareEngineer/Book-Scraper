@@ -37,6 +37,12 @@ build-backend = "poetry.core.masonry.api"
 [tool.pylint.format]
 max-line-length = 120
 
+[tool.pylint.master]
+ignore-paths = [
+    "^\\.venv/.*$",
+    "^Notes/.*$",
+]
+
 #----- MyPy config -----
 
 [tool.mypy]
@@ -50,3 +56,9 @@ module = [
     "redis.*"
 ]
 ignore_missing_imports = true
+
+[tool.mypy]
+exclude = [
+    '^.venv/',
+    '^Notes/',
+]
