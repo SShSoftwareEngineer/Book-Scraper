@@ -43,10 +43,19 @@ ignore-paths = [
     "^Notes/.*$",
 ]
 
+[tool.pylint.messages_control]
+disable = [
+    "fixme",  # Отключает предупреждения для TODO, FIXME и XXX (W0511)
+]
+
 #----- MyPy config -----
 
 [tool.mypy]
 python_version = "3.14"
+exclude = [
+    '^.venv/',
+    '^Notes/',
+]
 
 [[tool.mypy.overrides]]
 module = [
@@ -56,9 +65,3 @@ module = [
     "redis.*"
 ]
 ignore_missing_imports = true
-
-[tool.mypy]
-exclude = [
-    '^.venv/',
-    '^Notes/',
-]

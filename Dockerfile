@@ -1,6 +1,8 @@
 # Multi-stage Dockerfile for Book Scraper
 
+# ==========================================
 # Stage 1: Builder
+# ==========================================
 FROM python:3.14-slim AS builder
 
 WORKDIR /app
@@ -19,16 +21,20 @@ RUN poetry config virtualenvs.in-project true && \
 # Force reinstall redis to ensure compatibility with the latest version
 RUN poetry run pip install --force-reinstall redis
 
+# ==========================================
 # Stage 2: Base Runtime (for Beat and Flower)
-#FROM python:3.14-slim
+# ==========================================
 FROM python:3.14-slim AS runtime-base
 
 WORKDIR /app
 
+# Create non-root user first
+RUN groupadd -r appuser && useradd -m -r -g appuser appuser
+
 # Copy virtual environment from builder
 COPY --from=builder /app/.venv /app/.venv
 
-# Copy application code
+# Copy application code from builder
 COPY . .
 
 # Set environment variables
@@ -36,31 +42,38 @@ ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 
-# Create logs directory
-RUN mkdir -p logs
+# Create required directories and fix permissions
+RUN mkdir -p /app/logs /tmp && \
+    chown -R appuser:appuser /app /tmp && \
+    chmod 777 /tmp /app/logs
+
+# Switch to non-root user
+USER appuser
 
 # Expose ports
 EXPOSE 5555
 
-# Stage 3: Heavy Runtime (only for Worker and Scraper)
+# ==========================================
+# Stage 3: Heavy Runtime (for Worker and Scraper)
+# ==========================================
 FROM runtime-base AS runtime-heavy
 
-# Install Chromium and all system dependencies automatically
+# Temporarily switch back to root for system package installation
+USER root
+
+# Configure Playwright to store browsers in a shared, accessible directory
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+
+# Install Chromium and system dependencies
 RUN apt-get update && \
     playwright install-deps chromium && \
     rm -rf /var/lib/apt/lists/* && \
-    playwright install chromium
+    playwright install chromium && \
+    mkdir -p /ms-playwright && \
+    chown -R appuser:appuser /ms-playwright
 
-# Creating a non-root user
-RUN groupadd -r appuser && useradd -r -g appuser appuser
-
-# Changing Permissions
-WORKDIR /app
-RUN chown -R appuser:appuser /app
-USER appuser  # run as appuser, not root
-
-# Make / read-only where possible
-RUN mkdir -p /tmp /app/logs && chmod 777 /tmp /app/logs
+# Switch back to appuser
+USER appuser
 
 # Default command: run the launcher
 CMD ["python", "book_scraper.py"]
