@@ -37,10 +37,13 @@ build-backend = "poetry.core.masonry.api"
 [tool.pylint.format]
 max-line-length = 120
 
-[tool.pylint.master]
+[tool.pylint.main]
+ignore = [".venv", "Notes", "dist", "build"]
 ignore-paths = [
     "^\\.venv/.*$",
+    "^\\.venv\\\\.*$",
     "^Notes/.*$",
+    "^Notes\\\\.*$"
 ]
 
 [tool.pylint.messages_control]
