@@ -46,7 +46,7 @@ jobs:
         run: poetry install --no-interaction
 
       - name: Check Poetry lock
-        run: poetry lock --check
+        run: poetry check --lock
 
       - name: Run Pylint
         run: poetry run pylint .  # Укажите вашу директорию с кодом
