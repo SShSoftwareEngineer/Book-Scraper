@@ -1,14 +1,19 @@
 """
 Unit tests for Celery background tasks and database persistence workflows.
 This module contains test cases for validating task execution, Redis cache interaction,
-batching mechanics, and PostgreSQL database persistence in the tasks module.
+batching mechanics, and PostgreSQL database persistence in the task's module.
 """
 
 import json
 from types import SimpleNamespace
 
 import tasks
-from config import const, db_settings, redis_settings, logging_settings, flower_settings, selectors
+
+# from config import const, db_settings, redis_settings, logging_settings, flower_settings, selectors
+
+EXECUTE_BATCH = 'execute_batch'
+DB_CURSOR = '_db_cursor'
+DB_CONNECTION = '_db_connection'
 
 
 def make_book(title='Book', url='https://example.test/book'):
@@ -79,6 +84,7 @@ class FakeCache:
         Returns:
             Iterator: An iterator over the configured cache keys.
         """
+        _ = (match, count)
         return iter(self.keys)
 
 
@@ -116,7 +122,8 @@ def test_collect_and_save_splits_task_ids_into_configured_batches(monkeypatch):
 
     monkeypatch.setattr(tasks, 'cache', FakeCache(keys=['book:1', 'book:2', 'book:3']))
     monkeypatch.setattr(tasks.const, 'batch_size', 2)
-    monkeypatch.setattr(tasks.bulk_save_to_db, 'delay', fake_delay)
+    delay_method = 'delay'
+    monkeypatch.setattr(tasks.bulk_save_to_db, delay_method, fake_delay)
 
     assert tasks.collect_and_save.run() == ['batch-1', 'batch-2']
     assert submitted_batches == [['1', '2'], ['3']]
@@ -137,9 +144,9 @@ def test_bulk_save_to_db_writes_valid_books_as_one_batch(monkeypatch):
         executed['rows'] = rows
 
     monkeypatch.setattr(tasks, 'cache', fake_cache)
-    monkeypatch.setattr(tasks, 'execute_batch', fake_execute_batch)
-    monkeypatch.setattr(tasks.bulk_save_to_db, '_db_cursor', object())
-    monkeypatch.setattr(tasks.bulk_save_to_db, '_db_connection', fake_connection)
+    monkeypatch.setattr(tasks, EXECUTE_BATCH, fake_execute_batch)
+    monkeypatch.setattr(tasks.bulk_save_to_db, DB_CURSOR, object())
+    monkeypatch.setattr(tasks.bulk_save_to_db, DB_CONNECTION, fake_connection)
 
     saved_count = tasks.bulk_save_to_db.run(['1', '2'])
 
@@ -156,18 +163,18 @@ def test_bulk_save_to_db_skips_invalid_json(monkeypatch):
     """ Test that `bulk_save_to_db` skips malformed JSON records without failing the batch. """
     fake_cache = FakeCache(values={
         'book:1': '{not-json',
-        'book:2': json.dumps(make_book(title='Valid', url='https://example.test/valid')),
-    })
+        'book:2': json.dumps(make_book(title='Valid', url='https://example.test/valid')), })
     fake_connection = FakeConnection()
     executed = {}
 
     def fake_execute_batch(cursor, sql, rows):
         executed['rows'] = rows
+        _ = (cursor, sql, rows)
 
     monkeypatch.setattr(tasks, 'cache', fake_cache)
-    monkeypatch.setattr(tasks, 'execute_batch', fake_execute_batch)
-    monkeypatch.setattr(tasks.bulk_save_to_db, '_db_cursor', object())
-    monkeypatch.setattr(tasks.bulk_save_to_db, '_db_connection', fake_connection)
+    monkeypatch.setattr(tasks, EXECUTE_BATCH, fake_execute_batch)
+    monkeypatch.setattr(tasks.bulk_save_to_db, DB_CURSOR, object())
+    monkeypatch.setattr(tasks.bulk_save_to_db, DB_CONNECTION, fake_connection)
 
     saved_count = tasks.bulk_save_to_db.run(['1', '2'])
 
@@ -185,16 +192,17 @@ def test_bulk_save_to_db_rolls_back_and_keeps_cache_on_database_error(monkeypatc
     fake_connection = FakeConnection()
 
     def fake_execute_batch(cursor, sql, rows):
+        _ = (cursor, sql, rows)
         raise tasks.psycopg2.DatabaseError('boom')
 
     monkeypatch.setattr(tasks, 'cache', fake_cache)
-    monkeypatch.setattr(tasks, 'execute_batch', fake_execute_batch)
-    monkeypatch.setattr(tasks.bulk_save_to_db, '_db_cursor', object())
-    monkeypatch.setattr(tasks.bulk_save_to_db, '_db_connection', fake_connection)
+    monkeypatch.setattr(tasks, EXECUTE_BATCH, fake_execute_batch)
+    monkeypatch.setattr(tasks.bulk_save_to_db, DB_CURSOR, object())
+    monkeypatch.setattr(tasks.bulk_save_to_db, DB_CONNECTION, fake_connection)
 
     saved_count = tasks.bulk_save_to_db.run(['1'])
 
     assert saved_count == 0
     assert fake_connection.committed is False
     assert fake_connection.rolled_back is True
-    assert fake_cache.deleted == ()
+    assert not fake_cache.deleted

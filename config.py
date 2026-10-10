@@ -99,7 +99,7 @@ flower_settings = FlowerSettings()
 selectors = Selectors()
 
 # Alias for backward compatibility
-const = scraper_settings
+const: ScraperSettings = scraper_settings
 
 if __name__ == '__main__':
     pass
