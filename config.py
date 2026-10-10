@@ -7,11 +7,10 @@ from dataclasses import dataclass
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict  # type: ignore[import-not-found]
 
-BASE_MODEL_CONFIG = {
+BASE_MODEL_CONFIG: SettingsConfigDict = {
     'env_file': '.env',
     'env_file_encoding': 'utf-8',
-    'extra': 'ignore'
-}
+    'extra': 'ignore'}
 
 
 # pylint: disable=too-few-public-methods
