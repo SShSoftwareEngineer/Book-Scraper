@@ -32,6 +32,10 @@ dev = [
 requires = ["poetry-core>=1.0.0,<2.0.0"]
 build-backend = "poetry.core.masonry.api"
 
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
 #----- PyLint config -----
 
 [tool.pylint.format]
@@ -46,10 +50,9 @@ ignore-paths = [
     "^Notes\\\\.*$"
 ]
 
+# Отключает предупреждения для "to do", "fix me" и XXX (W0511 - маркеры задач в комментариях)
 [tool.pylint.messages_control]
-disable = [
-    "fixme",  # Отключает предупреждения для TODO, FIXME и XXX (W0511)
-]
+disable = ["fixme", ]
 
 #----- MyPy config -----
 

@@ -18,7 +18,7 @@ from config import redis_settings, logging_settings, flower_settings, const
 Path('logs').mkdir(exist_ok=True)
 
 # Track all started processes
-processes = []
+processes: list[subprocess.Popen | None] = []
 
 # Получаем гарантированный путь к python.exe внутри нашей .venv
 PYTHON_EXE_PATH = str(Path(sys.prefix) / "Scripts" / "python.exe") if sys.platform in ['Windows',
@@ -40,8 +40,8 @@ def check_redis() -> bool | None:
             host=redis_settings.host,
             port=redis_settings.port,
             socket_timeout=2,
-            socket_connect_timeout=2,
-            decode_responses=True,
+            socket_connect_timeout=2,  # type: ignore[call-arg]
+            decode_responses=True,  # type: ignore[call-arg]
         )
 
         if client.ping():

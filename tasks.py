@@ -289,7 +289,7 @@ def collect_and_save() -> list[str]:
     """
     # Get all book cache keys
     pattern = 'book:*'
-    book_keys = list(cache.scan_iter(match=pattern, count=100))
+    book_keys = list(cache.scan_iter(match=pattern, count=100))  # pylint: disable=no-member
 
     if not book_keys:
         return []
