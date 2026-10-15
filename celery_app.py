@@ -22,6 +22,12 @@ from celery import Celery  # pylint: disable=wrong-import-position, disable=impo
 import redis  # pylint: disable=wrong-import-position, disable=import-error
 from config import redis_settings, scraper_settings  # pylint: disable=wrong-import-position
 
+
+print("DEBUG ---> REDIS MODULE FILE:", getattr(redis, "__file__", "unknown"))
+print("DEBUG ---> REDIS VERSION:", getattr(redis, "__version__", "unknown"))
+
+
+
 # Initialize Celery app
 app = Celery('book_scraper')
 
