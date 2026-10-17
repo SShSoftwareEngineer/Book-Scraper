@@ -1,3 +1,4 @@
+# CI/CD
 name: BookScraper CI/CD Pipeline
 
 on:
@@ -92,6 +93,11 @@ jobs:
           poetry run pip list | grep -i redis
           poetry run python -c "import redis; print(redis.__file__, redis.__version__)"
           grep -A2 'name = "redis"' poetry.lock
+
+      - name: Who owns redis/
+        run: |
+          poetry run python check_redis_owner.py
+          poetry show | head -60
 
       - name: Run Pytest
         run: poetry run pytest
