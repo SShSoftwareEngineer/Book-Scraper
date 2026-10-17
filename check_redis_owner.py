@@ -1,3 +1,6 @@
+"""
+Module docstring
+"""
 from importlib.metadata import distributions
 
 for dist in distributions():
