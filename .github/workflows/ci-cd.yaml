@@ -88,24 +88,6 @@ jobs:
       - name: Install Playwright Browsers
         run: poetry run playwright install --with-deps chromium
 
-      - name: Debug redis
-        run: |
-          poetry run pip list | grep -i redis
-          poetry run python -c "import redis; print(redis.__file__, redis.__version__)"
-          grep -A2 'name = "redis"' poetry.lock
-
-      - name: Who owns redis/
-        run: |
-          poetry run python check_redis_owner.py
-          poetry show | head -60
-
-      - name: Inspect redis files
-        run: |
-          poetry run python -c "import redis, inspect; print(redis.__file__); print(redis.__version__); print(inspect.signature(redis.Redis.__init__))"
-          poetry run pip show -f redis | head -15
-          poetry run python -c "import redis, pathlib; p = pathlib.Path(redis.__file__); print(p.stat().st_size); print(p.read_text()[:400])"
-          poetry env info
-
       - name: Restore clean redis
         run: poetry run pip install --force-reinstall --no-deps redis==8.1.0
 
