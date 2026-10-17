@@ -99,6 +99,13 @@ jobs:
           poetry run python check_redis_owner.py
           poetry show | head -60
 
+      - name: Inspect redis files
+        run: |
+          poetry run python -c "import redis, inspect; print(redis.__file__); print(redis.__version__); print(inspect.signature(redis.Redis.__init__))"
+          poetry run pip show -f redis | head -15
+          poetry run python -c "import redis, pathlib; p = pathlib.Path(redis.__file__); print(p.stat().st_size); print(p.read_text()[:400])"
+          poetry env info
+
       - name: Run Pytest
         run: poetry run pytest
 
